@@ -2,11 +2,31 @@
 
 version: '3'
 
-vars:
-  GREETING: Hello, World!
-
 tasks:
   default:
+    desc: Show available tasks
     cmds:
-      - echo "{{.GREETING}}"
+      - task --list
     silent: true
+
+  install-uv:
+    desc: Install uv package manager
+    cmds:
+      - cmd: curl -LsSf https://astral.sh/uv/install.sh | sh
+        platforms: [darwin, linux]
+      - cmd: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        platforms: [windows]
+    status:
+      - command -v uv
+
+  sync:
+    desc: Install all project dependencies (including dev)
+    deps: [install-uv]
+    cmds:
+      - uv sync --all-groups
+
+  setup:
+    desc: Set up the development environment
+    deps: [sync]
+    cmds:
+      - echo "Development environment ready!"
