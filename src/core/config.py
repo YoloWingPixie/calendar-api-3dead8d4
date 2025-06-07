@@ -40,6 +40,8 @@ class Settings(BaseSettings):
 
     # Database settings
     database_url: str = "postgresql://user:pass@localhost/calendar_db"
+    database_pool_disabled: bool = False  # Disable pooling for serverless
+    database_echo: bool = False  # Log SQL statements (only for debugging)
 
     # Security settings
     api_key_header: str = "X-API-Key"
