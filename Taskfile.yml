@@ -64,9 +64,30 @@ tasks:
       - uv run pytest tests/ -v --cov=src --cov-report=term-missing
 
   dev:
-    desc: Run development server
+    desc: Run development server in Docker
+    cmds:
+      - docker-compose -f docker/docker-compose.yml up -d db
+      - docker-compose -f docker/docker-compose.yml up api
+
+  dev:local:
+    desc: Run development server locally
     cmds:
       - uv run python -m src.main
+
+  docker:build:
+    desc: Build Docker images
+    cmds:
+      - docker-compose -f docker/docker-compose.yml build
+
+  docker:down:
+    desc: Stop Docker containers
+    cmds:
+      - docker-compose -f docker/docker-compose.yml down
+
+  docker:logs:
+    desc: Show Docker logs
+    cmds:
+      - docker-compose -f docker/docker-compose.yml logs -f
 
   ci:
     desc: Run CI tasks
