@@ -7,7 +7,9 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI
 
 
-def load_routers_from_module(module_name: str, prefix: str) -> list[APIRouter]:
+def load_routers_from_module(
+    module_name: str, prefix: str
+) -> list[tuple[APIRouter, str]]:
     """Recursively load all routers from a module.
 
     Args:
@@ -15,13 +17,15 @@ def load_routers_from_module(module_name: str, prefix: str) -> list[APIRouter]:
         prefix: The URL prefix for the routes (e.g., '/api/v1')
 
     Returns:
-        List of routers found in the module
+        List of tuples containing (router, prefix) found in the module
     """
-    routers = []
+    routers: list[tuple[APIRouter, str]] = []
 
     try:
         # Import the module
         module = importlib.import_module(module_name)
+        if module.__file__ is None:
+            return routers
         module_path = Path(module.__file__).parent
 
         # Iterate through all modules in the package
@@ -39,7 +43,7 @@ def load_routers_from_module(module_name: str, prefix: str) -> list[APIRouter]:
                     if hasattr(sub_module, "router"):
                         router = sub_module.router
                         if isinstance(router, APIRouter):
-                            # Clone the router with the prefix
+                            # Store the router with its prefix
                             routers.append((router, prefix))
                 except ImportError:
                     # Skip modules that can't be imported
