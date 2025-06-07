@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+
+# Development
+.git/
+.github/
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+*.sqlite
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+docs/
+README.md
+CLAUDE.md
+
+# Testing
+tests/
+conftest.py
+pytest.ini
+.coverage*
+
+# Infrastructure
+terraform/
+docker-compose.yml
+Dockerfile
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+Taskfile.yml
+alembic.ini
+scripts/
