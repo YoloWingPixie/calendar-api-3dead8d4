@@ -1,12 +1,18 @@
 """Test for main module."""
 
-import pytest
+from fastapi import FastAPI
 
-from src.main import main
+from src.main import app, create_app
 
 
-def test_main(capsys: pytest.CaptureFixture[str]) -> None:
-    """Test main function prints expected output."""
-    main()
-    captured = capsys.readouterr()
-    assert "Calendar API - Starting..." in captured.out
+def test_create_app() -> None:
+    """Test that create_app returns a FastAPI instance."""
+    test_app = create_app()
+    assert isinstance(test_app, FastAPI)
+    assert test_app.title == "Calendar API"
+
+
+def test_app_instance() -> None:
+    """Test that app is a FastAPI instance."""
+    assert isinstance(app, FastAPI)
+    assert app.title == "Calendar API"
