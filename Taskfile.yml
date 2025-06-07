@@ -27,6 +27,38 @@ tasks:
 
   setup:
     desc: Set up the development environment
-    deps: [sync]
+    deps: [sync, pre-commit:install]
     cmds:
       - echo "Development environment ready!"
+
+  pre-commit:install:
+    desc: Install pre-commit hooks
+    cmds:
+      - uv run pre-commit install
+    status:
+      - test -f .git/hooks/pre-commit
+
+  pre-commit:run:
+    desc: Run pre-commit on all files
+    cmds:
+      - uv run pre-commit run --all-files
+
+  format:
+    desc: Format code with ruff
+    cmds:
+      - uv run ruff format .
+
+  lint:
+    desc: Lint code with ruff
+    cmds:
+      - uv run ruff check . --fix
+
+  typecheck:
+    desc: Type check with mypy
+    cmds:
+      - uv run mypy src/
+
+  test:
+    desc: Run tests with pytest
+    cmds:
+      - uv run pytest tests/ -v --cov=src --cov-report=term-missing
