@@ -60,10 +60,10 @@ CREATE TABLE calendar_events (
     CONSTRAINT end_after_start CHECK (end_time > start_time),
     CONSTRAINT min_duration CHECK (end_time - start_time >= interval '1 minute'),
     CONSTRAINT all_day_constraint CHECK (
-        (is_all_day = false) OR 
-        (is_all_day = true AND 
-         start_time::time = '00:00:00' AND 
-         end_time::time = '23:59:59' AND 
+        (is_all_day = false) OR
+        (is_all_day = true AND
+         start_time::time = '00:00:00' AND
+         end_time::time = '23:59:59' AND
          start_time::date = end_time::date)
     )
 );
@@ -198,4 +198,4 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     timestamp: datetime
-``` 
+```

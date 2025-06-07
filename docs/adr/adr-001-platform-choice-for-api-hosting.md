@@ -21,4 +21,4 @@ The project requires a reliable, secure, scalable, and cost-effective platform t
 - Azure
 
 ## Decision Outome
-**AWS** due to its current use by the organization while meeting all decision drivers. 
+**AWS** due to its current use by the organization while meeting all decision drivers.

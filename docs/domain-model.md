@@ -9,7 +9,7 @@
     - OwnerUserId: Identifier of the `User` who owns this calendar (FK)
     - EditorIds: List of `User` Id who are able to create, update, or delete `Event` from this calendar (FK)
     - ReaderIds: List of `User` Id who are able to read `Event` from this calendar (FK)
-    - PublicRead: Boolean. If true, any `User` can read this calendar. 
+    - PublicRead: Boolean. If true, any `User` can read this calendar.
     - PublicWrite: Boolean. If true, any `User` can perform Editor actions on this calendar's `Event`.
     - CalendarName: Human readable name of the calendar.
     - EventIds: List of `Event` associated with the calendar. (FK)

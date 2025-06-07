@@ -220,24 +220,24 @@ GitHub Actions workflows implementing trunk-based development:
   - Run linter (ruff)
   - Type checking
   - Security scanning
-  
+
 - **build.yml**: Docker image building
   - Multi-stage Docker build
   - Push to Amazon ECR
   - Tag with git SHA and environment
-  
+
 - **deploy.yml**: Reusable deployment workflow
   - Takes environment as input
   - Updates ECS service
   - Runs database migrations
   - Health checks
-  
+
 - **cd.yml**: Continuous Deployment orchestrator
   - Triggers on main branch push
   - Calls build.yml
   - Calls deploy.yml for each environment (dev → staging → prod)
   - Implements deployment gates between environments
-  
+
 - **Integration**: Doppler for secrets management
 
 ## Development Workflow

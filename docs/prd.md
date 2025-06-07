@@ -89,4 +89,4 @@ This document specifies the requirements for a new internal Calendar API. The ob
 *   **SLO-5.2: Availability:** Target 99.9% uptime. Errors must conform to the `Error` schema in the OpenAPI spec.
 *   **STD-5.3: Maintainability:** Code must pass linter checks before merge. All infrastructure changes must be made via Terraform.
 *   **STD-5.4: Security:** Require TLS 1.2+ for external traffic. Source secrets from AWS Secrets Manager. IAM roles and Security Groups must be least-privilege.
-*   **STD-5.5: Developer Experience:** A new developer must be able to stand up a local environment by following the `README.md`. 
+*   **STD-5.5: Developer Experience:** A new developer must be able to stand up a local environment by following the `README.md`.

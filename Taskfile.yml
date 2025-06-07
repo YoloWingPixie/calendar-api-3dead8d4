@@ -62,3 +62,7 @@ tasks:
     desc: Run tests with pytest
     cmds:
       - uv run pytest tests/ -v --cov=src --cov-report=term-missing
+
+  ci:
+    desc: Run CI tasks
+    deps: [lint, typecheck, test, format, pre-commit:run]

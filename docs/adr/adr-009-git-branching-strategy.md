@@ -60,4 +60,4 @@ The project requires a Git branching strategy that supports efficient developmen
      - Less suitable for complex releases
 
 ## Decision Outcome
-**Trunk-Based Development** has been selected as the Git branching strategy. This decision is driven by our need for rapid development and continuous integration. TBD's emphasis on short-lived branches and frequent integration aligns well with our CI/CD platform and container-based deployment strategy. While it requires strong testing practices and good CI/CD, these are already part of our development approach. The strategy will help maintain code quality while enabling efficient development and deployment. 
+**Trunk-Based Development** has been selected as the Git branching strategy. This decision is driven by our need for rapid development and continuous integration. TBD's emphasis on short-lived branches and frequent integration aligns well with our CI/CD platform and container-based deployment strategy. While it requires strong testing practices and good CI/CD, these are already part of our development approach. The strategy will help maintain code quality while enabling efficient development and deployment.

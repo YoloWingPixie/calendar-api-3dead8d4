@@ -57,4 +57,4 @@ The project requires a base container image for the Python FastAPI application. 
      - Potential runtime issues
 
 ## Decision Outcome
-**python:3.13-slim** has been selected as the base container image. This decision is driven by the need for a balance between image size, security, and functionality. The slim variant provides essential build tools while maintaining a small footprint, making it ideal for Fargate deployment. While the full image offers more tools and the Alpine variant is smaller, the slim image provides the best balance of features, security, and efficiency for our Python FastAPI application. 
+**python:3.13-slim** has been selected as the base container image. This decision is driven by the need for a balance between image size, security, and functionality. The slim variant provides essential build tools while maintaining a small footprint, making it ideal for Fargate deployment. While the full image offers more tools and the Alpine variant is smaller, the slim image provides the best balance of features, security, and efficiency for our Python FastAPI application.
