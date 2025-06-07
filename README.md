@@ -1,5 +1,7 @@
 # Calendar API
 
+[![CI](https://github.com/YOUR_USERNAME/calendar-api/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/calendar-api/actions/workflows/ci.yml)
+
 A centralized backend REST API service for calendar and event management, designed to replace fragmented legacy calendar tools within the organization.
 
 ## Overview
