@@ -1,1 +1,14 @@
+#Dev Env
+.claude/
+CLAUDE.md
 .task/
+.vscode/
+.idea/
+.cursor/
+
+#Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
