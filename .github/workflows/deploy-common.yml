@@ -94,8 +94,8 @@ jobs:
 
           SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_NAME" --query SecretString --output text)
 
-          # Extract DATABASE_URL
-          DATABASE_URL=$(echo "$SECRET_JSON" | jq -r '.DATABASE_URL')
+          # Extract DATABASE_URL (using TF_VAR_ prefix from Doppler)
+          DATABASE_URL=$(echo "$SECRET_JSON" | jq -r '.TF_VAR_database_url')
 
           if [[ -z "$DATABASE_URL" || "$DATABASE_URL" == "null" ]]; then
             echo "ERROR: DATABASE_URL not found in secrets"
