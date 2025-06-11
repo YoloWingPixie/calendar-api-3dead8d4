@@ -117,7 +117,6 @@ resource "aws_ecs_task_definition" "app" {
 
     portMappings = [{
       containerPort = var.app_port
-      hostPort      = var.app_port
       protocol      = "tcp"
     }]
 
@@ -131,11 +130,11 @@ resource "aws_ecs_task_definition" "app" {
     }
 
     healthCheck = {
-      retries = 10
-      command = [ "CMD-SHELL", "curl -f http://localhost:${var.app_port}/api/v1/health || exit 1" ]
-      timeout = 10
-      interval = 60
-      startPeriod = 60
+      retries = 3
+      command = [ "CMD", "curl", "-f", "http://localhost:${var.app_port}/api/v1/health" ]
+      timeout = 5
+      interval = 10
+      startPeriod = 10
     }
   }])
 }
