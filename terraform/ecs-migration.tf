@@ -10,7 +10,7 @@ resource "aws_ecs_task_definition" "migration" {
 
   container_definitions = jsonencode([{
     name  = "migration"
-    image = var.container_image_uri != "" ? var.container_image_uri : "${data.aws_ecr_repository.app.repository_url}:latest"
+    image = "${data.aws_ecr_repository.app.repository_url}:${var.docker_image_tag}"
 
     # Override command to run migrations
     command = ["alembic", "upgrade", "head"]
