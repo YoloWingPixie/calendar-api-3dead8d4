@@ -47,6 +47,18 @@ task
 - [Domain Model](docs/domain-model.md)
 - [Data Model](docs/data-model.md)
 
+## Infrastructure
+
+Terraform manages AWS infrastructure (ECS, RDS, ALB). Key points:
+
+- **Environments**: dev/staging/prod are canonical. Others (PR deployments) use dev Doppler config
+- **State**: S3 backend with state locking
+- **Deployment**: `terraform apply -var="environment=dev"` from `terraform/` directory
+- **Secrets**: Doppler syncs to AWS Secrets Manager. RDS credentials auto-update in Doppler post-deployment
+- **Shared resources**: ECR repository created once via `terraform/shared/`
+
+See `terraform/locals.tf` for environment configuration logic.
+
 ## License
 
 This is an internal project. All rights reserved.

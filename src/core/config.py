@@ -1,5 +1,7 @@
 """Application configuration using pydantic-settings."""
 
+import json
+import os
 import tomllib
 from pathlib import Path
 
@@ -25,6 +27,24 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+
+    def __init__(self, **kwargs):
+        """Initialize settings with Doppler JSON parsing support."""
+        # Check if running in ECS with Doppler secrets
+        doppler_json = os.getenv("DOPPLER_SECRETS_JSON")
+        if doppler_json:
+            try:
+                # Parse the JSON blob from Doppler
+                doppler_secrets = json.loads(doppler_json)
+                # Merge Doppler secrets with any existing environment variables
+                # Environment variables take precedence for local development
+                for key, value in doppler_secrets.items():
+                    if key not in os.environ:
+                        os.environ[key] = str(value)
+            except json.JSONDecodeError:
+                pass  # Fail silently and fall back to normal env vars
+
+        super().__init__(**kwargs)
 
     # Application settings
     app_name: str = "Calendar API"
