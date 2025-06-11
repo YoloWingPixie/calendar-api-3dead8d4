@@ -94,7 +94,7 @@ resource "aws_ecs_task_definition" "app" {
 
   container_definitions = jsonencode([{
     name  = var.project_name
-    image = "${data.aws_ecr_repository.app.repository_url}:${var.environment}"
+    image = "${data.aws_ecr_repository.app.repository_url}:${var.docker_image_tag}"
 
     environment = [
       {

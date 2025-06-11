@@ -98,3 +98,15 @@ variable "doppler_token" {
   type        = string
   sensitive   = true
 }
+
+variable "docker_image_tag" {
+  description = "Docker image tag to deploy"
+  type        = string
+  default     = "latest"
+}
+
+variable "pr_number" {
+  description = "PR number for ephemeral environments"
+  type        = number
+  default     = null
+}

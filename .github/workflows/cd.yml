@@ -1,0 +1,428 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+          - pr-*
+      image_tag:
+        description: 'Docker image tag to deploy'
+        required: true
+        type: string
+      version:
+        description: 'Application version'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write  # Required for AWS OIDC
+  deployments: write
+
+env:
+  AWS_REGION: us-east-1
+  TF_VERSION: 1.5.7
+  AWS_ROLE_ARN: arn:aws:iam::655593807337:role/github-actions-calendar-api
+
+jobs:
+  validate-environment:
+    name: Validate Environment
+    runs-on: ubuntu-latest
+    outputs:
+      doppler_config: ${{ steps.config.outputs.doppler_config }}
+      is_ephemeral: ${{ steps.config.outputs.is_ephemeral }}
+      pr_number: ${{ steps.config.outputs.pr_number }}
+
+    steps:
+      - name: Determine configuration
+        id: config
+        run: |
+          ENV="${{ inputs.environment }}"
+          IS_EPHEMERAL="false"
+          PR_NUMBER=""
+
+          # Check if this is an ephemeral PR environment
+          if [[ "$ENV" =~ ^pr-([0-9]+)$ ]]; then
+            IS_EPHEMERAL="true"
+            PR_NUMBER="${BASH_REMATCH[1]}"
+            # Ephemeral environments use dev Doppler config
+            DOPPLER_CONFIG="dev"
+          else
+            # Canonical environments
+            case "$ENV" in
+              dev|staging|prod)
+                DOPPLER_CONFIG="$ENV"
+                ;;
+              *)
+                echo "Invalid environment: $ENV"
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "Environment: $ENV"
+          echo "Doppler Config: $DOPPLER_CONFIG"
+          echo "Is Ephemeral: $IS_EPHEMERAL"
+          echo "PR Number: $PR_NUMBER"
+
+          echo "doppler_config=$DOPPLER_CONFIG" >> $GITHUB_OUTPUT
+          echo "is_ephemeral=$IS_EPHEMERAL" >> $GITHUB_OUTPUT
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: validate-environment
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Create tfvars file
+        working-directory: terraform
+        run: |
+          cat > deploy.tfvars <<EOF
+          environment = "${{ inputs.environment }}"
+          doppler_token = "${{ secrets.DOPPLER_TOKEN }}"
+          docker_image_tag = "${{ inputs.image_tag }}"
+          is_ephemeral = ${{ needs.validate-environment.outputs.is_ephemeral }}
+          EOF
+
+          # Add PR number for ephemeral environments
+          if [[ "${{ needs.validate-environment.outputs.is_ephemeral }}" == "true" ]]; then
+            echo "pr_number = ${{ needs.validate-environment.outputs.pr_number }}" >> deploy.tfvars
+          fi
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="key=calendar-api/${{ inputs.environment }}/terraform.tfstate"
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: |
+          terraform plan \
+            -var-file=deploy.tfvars \
+            -out=tfplan
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: terraform/tfplan
+          retention-days: 7
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: [validate-environment, terraform-plan]
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-${{ github.repository_owner }}-${{ github.event.repository.name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Download plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: terraform
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="key=calendar-api/${{ inputs.environment }}/terraform.tfstate"
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve tfplan
+
+  deploy-application:
+    name: Deploy Application
+    runs-on: ubuntu-latest
+    needs: [validate-environment, terraform-apply]
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-${{ github.repository_owner }}-${{ github.event.repository.name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Force new deployment
+        run: |
+          CLUSTER_NAME="calendar-api-${{ inputs.environment }}"
+          SERVICE_NAME="calendar-api"
+
+          # Get current task definition
+          TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query "services[0].taskDefinition" \
+            --output text)
+
+          # Force new deployment with latest task definition
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $SERVICE_NAME \
+            --task-definition $TASK_DEF_ARN \
+            --force-new-deployment
+
+          echo "Deployment triggered for ${{ inputs.environment }} with image tag: ${{ inputs.image_tag }}"
+
+      - name: Wait for deployment
+        run: |
+          CLUSTER_NAME="calendar-api-${{ inputs.environment }}"
+          SERVICE_NAME="calendar-api"
+
+          echo "Waiting for deployment to complete..."
+          aws ecs wait services-stable \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME
+
+          echo "Deployment completed successfully!"
+
+      - name: Get deployment details
+        id: deployment_info
+        run: |
+          CLUSTER_NAME="calendar-api-${{ inputs.environment }}"
+          SERVICE_NAME="calendar-api"
+
+          # Get ALB DNS name
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names "calendar-api-${{ inputs.environment }}" \
+            --query "LoadBalancers[0].DNSName" \
+            --output text 2>/dev/null || echo "")
+
+          # Get service details
+          SERVICE_ARN=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query "services[0].serviceArn" \
+            --output text)
+
+          # Get task ARN
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster $CLUSTER_NAME \
+            --service-name $SERVICE_NAME \
+            --query "taskArns[0]" \
+            --output text)
+
+          # Get ECS cluster ARN
+          CLUSTER_ARN=$(aws ecs describe-clusters \
+            --clusters $CLUSTER_NAME \
+            --query "clusters[0].clusterArn" \
+            --output text)
+
+          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "service_arn=$SERVICE_ARN" >> $GITHUB_OUTPUT
+          echo "task_arn=$TASK_ARN" >> $GITHUB_OUTPUT
+          echo "cluster_arn=$CLUSTER_ARN" >> $GITHUB_OUTPUT
+
+      - name: Create deployment record
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: '${{ inputs.environment }}',
+              description: 'Deploy version ${{ inputs.version }}',
+              auto_merge: false,
+              required_contexts: []
+            });
+
+            const alb_dns = '${{ steps.deployment_info.outputs.alb_dns }}';
+            const environment_url = alb_dns ? `http://${alb_dns}` : 'https://${{ inputs.environment }}.calendar-api.example.com';
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'success',
+              environment_url: environment_url,
+              description: 'Deployment completed'
+            });
+
+      - name: Comment deployment details on PR
+        if: contains(inputs.environment, 'pr-')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr_number = '${{ inputs.environment }}'.replace('pr-', '');
+            const alb_dns = '${{ steps.deployment_info.outputs.alb_dns }}';
+            const cluster_arn = '${{ steps.deployment_info.outputs.cluster_arn }}';
+            const service_arn = '${{ steps.deployment_info.outputs.service_arn }}';
+            const task_arn = '${{ steps.deployment_info.outputs.task_arn }}';
+            const aws_region = '${{ env.AWS_REGION }}';
+            const aws_account = cluster_arn.split(':')[4];
+
+            // Parse ARNs for console URLs
+            const cluster_name = cluster_arn.split('/').pop();
+            const service_name = service_arn.split('/').pop();
+            const task_id = task_arn.split('/').pop();
+
+            let body = '## 🚀 Deployment Complete!\n\n';
+            body += '**Environment:** `${{ inputs.environment }}`\n';
+            body += '**Version:** `${{ inputs.version }}`\n';
+            body += '**Image Tag:** `${{ inputs.image_tag }}`\n\n';
+
+            if (alb_dns) {
+              body += '### 🌐 API Endpoints\n\n';
+              body += '**Base URL:** `http://' + alb_dns + '`\n\n';
+              body += '**Health Check:**\n';
+              body += '```bash\n';
+              body += 'curl http://' + alb_dns + '/api/v1/health\n';
+              body += '```\n\n';
+              body += '**Example API Calls:**\n';
+              body += '```bash\n';
+              body += '# List calendars (requires API key)\n';
+              body += 'curl -H "X-API-Key: YOUR_API_KEY" http://' + alb_dns + '/api/v1/calendars\n\n';
+              body += '# Create a new calendar\n';
+              body += 'curl -X POST -H "X-API-Key: YOUR_API_KEY" -H "Content-Type: application/json" \\\n';
+              body += '  -d \'{"name": "My Calendar", "description": "Test calendar"}\' \\\n';
+              body += '  http://' + alb_dns + '/api/v1/calendars\n';
+              body += '```\n\n';
+            }
+
+            body += '### 🔧 AWS Console Links\n\n';
+            body += '- [ECS Cluster](' +
+              `https://console.aws.amazon.com/ecs/v2/clusters/${cluster_name}/services?region=${aws_region}` + ')\n';
+            body += '- [ECS Service](' +
+              `https://console.aws.amazon.com/ecs/v2/clusters/${cluster_name}/services/${service_name}/tasks?region=${aws_region}` + ')\n';
+            body += '- [CloudWatch Logs](' +
+              `https://console.aws.amazon.com/cloudwatch/home?region=${aws_region}#logsV2:log-groups/log-group/$252Fecs$252Fcalendar-api-${{ inputs.environment }}` + ')\n';
+
+            if (alb_dns) {
+              body += '- [Load Balancer](' +
+                `https://console.aws.amazon.com/ec2/v2/home?region=${aws_region}#LoadBalancers:search=${alb_dns}` + ')\n';
+            }
+
+            body += '\n### 🔍 Debugging Commands\n';
+            body += '```bash\n';
+            body += '# View ECS task logs\n';
+            body += `aws logs tail /ecs/calendar-api-${{ inputs.environment }} --follow\n\n`;
+            body += '# Get task details\n';
+            body += `aws ecs describe-tasks --cluster ${cluster_name} --tasks ${task_id}\n\n`;
+            body += '# SSH into container (if exec enabled)\n';
+            body += `aws ecs execute-command --cluster ${cluster_name} --task ${task_id} --container calendar-api --interactive --command "/bin/sh"\n`;
+            body += '```\n';
+
+            body += '\n---\n';
+            body += '_This is an ephemeral environment that will be destroyed when the PR is closed._\n';
+
+            // Delete previous deployment comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(pr_number)
+            });
+
+            const botComments = comments.filter(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('🚀 Deployment Complete!')
+            );
+
+            for (const comment of botComments) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id
+              });
+            }
+
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(pr_number),
+              body: body
+            });
+
+  cleanup-ephemeral:
+    name: Cleanup Ephemeral Environment
+    runs-on: ubuntu-latest
+    needs: [validate-environment]
+    if: needs.validate-environment.outputs.is_ephemeral == 'true' && github.event_name == 'pull_request' && github.event.action == 'closed'
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-${{ github.repository_owner }}-${{ github.event.repository.name }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Destroy
+        working-directory: terraform
+        run: |
+          terraform init \
+            -backend-config="key=calendar-api/${{ inputs.environment }}/terraform.tfstate"
+
+          terraform destroy -auto-approve \
+            -var="environment=${{ inputs.environment }}" \
+            -var="doppler_token=${{ secrets.DOPPLER_TOKEN }}" \
+            -var="is_ephemeral=true" \
+            -var="pr_number=${{ needs.validate-environment.outputs.pr_number }}"
+
+      - name: Delete deployment record
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployments = await github.rest.repos.listDeployments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment: '${{ inputs.environment }}'
+            });
+
+            for (const deployment of deployments.data) {
+              await github.rest.repos.createDeploymentStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: deployment.id,
+                state: 'inactive'
+              });
+            }

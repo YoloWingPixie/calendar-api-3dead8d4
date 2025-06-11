@@ -13,6 +13,117 @@ env:
   FORCE_COLOR: 1
 
 jobs:
+  validate-version:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' &&
+      (github.event.pull_request.base.ref == 'main' ||
+       contains(github.event.pull_request.base.ref, 'release/') ||
+       (contains(github.event.pull_request.head.ref, 'release/') && github.event.pull_request.base.ref == 'main'))
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history
+
+      - name: Checkout base branch
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+
+      - name: Validate semver and version bump
+        id: validate
+        run: |
+          # Get current version from PR branch
+          PR_VERSION=$(grep -E '^version = ".*"$' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "PR version: $PR_VERSION"
+
+          # Validate semver format (X.Y.Z where X, Y, Z are numbers)
+          if ! [[ "$PR_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Version '$PR_VERSION' is not valid semver format (X.Y.Z)"
+            exit 1
+          fi
+
+          # Get base branch version
+          BASE_VERSION=$(git show origin/${{ github.event.pull_request.base.ref }}:pyproject.toml | grep -E '^version = ".*"$' | sed 's/version = "\(.*\)"/\1/')
+          echo "Base version: $BASE_VERSION"
+
+          # Compare versions
+          compare_versions() {
+            local ver1=$1
+            local ver2=$2
+
+            # Split versions into components
+            IFS='.' read -r major1 minor1 patch1 <<< "$ver1"
+            IFS='.' read -r major2 minor2 patch2 <<< "$ver2"
+
+            # Compare major
+            if [ "$major1" -gt "$major2" ]; then
+              return 0
+            elif [ "$major1" -lt "$major2" ]; then
+              return 1
+            fi
+
+            # Compare minor
+            if [ "$minor1" -gt "$minor2" ]; then
+              return 0
+            elif [ "$minor1" -lt "$minor2" ]; then
+              return 1
+            fi
+
+            # Compare patch
+            if [ "$patch1" -gt "$patch2" ]; then
+              return 0
+            else
+              return 1
+            fi
+          }
+
+          if compare_versions "$PR_VERSION" "$BASE_VERSION"; then
+            echo "✅ Version bump validated: $BASE_VERSION → $PR_VERSION"
+            echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
+            echo "pr_version=$PR_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Version must be higher than base branch version ($BASE_VERSION)"
+            exit 1
+          fi
+
+      - name: Comment version bump on PR
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const base_version = '${{ steps.validate.outputs.base_version }}';
+            const pr_version = '${{ steps.validate.outputs.pr_version }}';
+
+            // Delete previous version bump comments
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.pull_request.number }}
+            });
+
+            const botComments = comments.filter(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('📦 **Calendar API** will bump from')
+            );
+
+            for (const comment of botComments) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id
+              });
+            }
+
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.pull_request.number }},
+              body: `📦 **Calendar API** will bump from \`${base_version}\` → \`${pr_version}\``
+            });
+
   test:
     name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
