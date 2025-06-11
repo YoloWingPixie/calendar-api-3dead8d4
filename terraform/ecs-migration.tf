@@ -12,8 +12,8 @@ resource "aws_ecs_task_definition" "migration" {
     name  = "migration"
     image = "${data.aws_ecr_repository.app.repository_url}:${var.docker_image_tag}"
 
-    # Override command to run migrations
-    command = ["alembic", "upgrade", "head"]
+    # Override command to run migrations with Doppler support
+    command = ["python", "/app/scripts/run_migrations.py"]
 
     # Environment variables
     environment = [
