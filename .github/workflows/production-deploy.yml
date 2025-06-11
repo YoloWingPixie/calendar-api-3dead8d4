@@ -43,7 +43,23 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          SHA_TAG="sha-${{ github.sha }}"
+          # For merge commits, we need to find the PR head SHA that was actually built
+          # GitHub merge commits don't get built - only the PR head commits do
+          MERGE_SHA="${{ github.sha }}"
+
+          # Try to find the second parent of the merge commit (the PR head)
+          PR_HEAD_SHA=$(git rev-parse ${MERGE_SHA}^2 2>/dev/null || echo "")
+
+          if [[ -n "$PR_HEAD_SHA" ]]; then
+            echo "Found PR head SHA: $PR_HEAD_SHA"
+            SHA_TO_DEPLOY="$PR_HEAD_SHA"
+          else
+            # Not a merge commit, use the commit SHA directly
+            echo "Not a merge commit, using commit SHA directly"
+            SHA_TO_DEPLOY="$MERGE_SHA"
+          fi
+
+          SHA_TAG="sha-${SHA_TO_DEPLOY}"
           IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG"
 
           echo "Verifying image: $IMAGE_URI"
@@ -57,19 +73,20 @@ jobs:
             echo "❌ Image not found: $IMAGE_URI"
             echo "This commit SHA was not built and tested through the staging workflow."
             echo "Only commits that have been through PR review and staging can be deployed to production."
+            echo "Merge SHA: $MERGE_SHA"
+            echo "PR Head SHA: $PR_HEAD_SHA"
             exit 1
           fi
 
       - name: Tag image for production
         run: |
-          SHA_TAG="sha-${{ github.sha }}"
           PROD_TAG="prod-${{ github.sha }}"
           LATEST_TAG="latest"
 
-          # Pull the SHA-tagged image
+          # Pull the SHA-tagged image (from PR head)
           docker pull ${{ steps.verify.outputs.image_uri }}
 
-          # Tag it with prod- and latest
+          # Tag it with prod- (using merge commit SHA) and latest
           docker tag ${{ steps.verify.outputs.image_uri }} ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$PROD_TAG
           docker tag ${{ steps.verify.outputs.image_uri }} ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$LATEST_TAG
 
