@@ -64,10 +64,79 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::655593807337:role/github-actions-calendar-api' }}
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
+  # Run database migrations
+  migrate:
+    name: Run Database Migrations
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Get Database Connection Info
+        id: db_info
+        run: |
+          # Get Doppler config based on environment
+          DOPPLER_CONFIG="${{ inputs.environment }}"
+          if [[ "${{ inputs.environment }}" != "prod" ]] && [[ "${{ inputs.environment }}" != "stg" ]]; then
+            DOPPLER_CONFIG="dev"
+          fi
+
+          # Get secrets from AWS Secrets Manager (synced from Doppler)
+          SECRET_NAME="/calendar-api/${DOPPLER_CONFIG}/"
+          echo "Getting secrets from: $SECRET_NAME"
+
+          SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_NAME" --query SecretString --output text)
+
+          # Extract DATABASE_URL
+          DATABASE_URL=$(echo "$SECRET_JSON" | jq -r '.DATABASE_URL')
+
+          if [[ -z "$DATABASE_URL" || "$DATABASE_URL" == "null" ]]; then
+            echo "ERROR: DATABASE_URL not found in secrets"
+            exit 1
+          fi
+
+          # Mask the database URL for security
+          echo "::add-mask::$DATABASE_URL"
+          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run Alembic Migrations
+        run: |
+          echo "Running database migrations for environment: ${{ inputs.environment }}"
+          uv run alembic upgrade head
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Verify Migration Status
+        run: |
+          echo "Checking current database revision..."
+          uv run alembic current
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
   # Common post deployment tasks
   post_deploy:
     name: Post Deployment Tasks
-    needs: deploy
+    needs: [deploy, migrate]
     runs-on: ubuntu-latest
     outputs:
       environment_url: ${{ steps.get_url.outputs.url }}
