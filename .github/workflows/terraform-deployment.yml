@@ -1,0 +1,148 @@
+name: Terraform Deployment (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment_name:
+        description: "Logical name of the environment (e.g., dev-ephemeral, staging, production)"
+        required: true
+        type: string
+      tf_action:
+        description: "Terraform action to perform (apply or destroy)"
+        required: true
+        type: string
+      tf_workspace:
+        description: "Terraform workspace to target (e.g., default, stg, prod, pr-123)"
+        required: true
+        type: string
+      container_image_uri:
+        description: "Full URI of the container image to deploy"
+        required: false
+        type: string
+      terraform_directory:
+        description: "Path to Terraform configuration files"
+        required: false
+        type: string
+        default: "./terraform"
+      pr_number:
+        description: "PR number for ephemeral environments"
+        required: false
+        type: number
+    secrets:
+      AWS_ROLE_TO_ASSUME:
+        description: "ARN of the AWS IAM role to assume"
+        required: true
+      DOPPLER_TOKEN:
+        description: "Doppler token for secrets management"
+        required: true
+
+permissions:
+  id-token: write  # For AWS OIDC authentication
+  contents: read   # To checkout code
+
+jobs:
+  terraform_operations:
+    name: Terraform ${{ inputs.tf_action }} - ${{ inputs.environment_name }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment_name }}
+      url: ${{ steps.deploy.outputs.environment_url }}
+
+    outputs:
+      environment_url: ${{ steps.deploy.outputs.environment_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@651471c36a6092792c552e8b1bef71e592b462d8 # v3.1.1
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          terraform init \
+            -backend-config="key=calendar-api/${{ inputs.tf_workspace }}/terraform.tfstate"
+
+      - name: Select or Create Terraform Workspace
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          terraform workspace select ${{ inputs.tf_workspace }} || terraform workspace new ${{ inputs.tf_workspace }}
+
+      - name: Terraform Plan (if apply)
+        if: inputs.tf_action == 'apply'
+        id: plan
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          # Extract image tag from URI if provided
+          if [[ -n "${{ inputs.container_image_uri }}" ]]; then
+            IMAGE_TAG="${{ inputs.container_image_uri }}"
+            IMAGE_TAG="${IMAGE_TAG##*:}"  # Get everything after the last colon
+          else
+            IMAGE_TAG="latest"
+          fi
+
+          # Set environment-specific variables
+          ENVIRONMENT="${{ inputs.tf_workspace }}"
+          IS_EPHEMERAL="false"
+          PR_NUMBER=""
+
+          if [[ "$ENVIRONMENT" == pr-* ]]; then
+            IS_EPHEMERAL="true"
+            PR_NUMBER="${{ inputs.pr_number }}"
+          fi
+
+          terraform plan -out=tfplan \
+            -var="environment=$ENVIRONMENT" \
+            -var="doppler_token=${{ secrets.DOPPLER_TOKEN }}" \
+            -var="docker_image_tag=$IMAGE_TAG" \
+            -var="is_ephemeral=$IS_EPHEMERAL" \
+            ${PR_NUMBER:+-var="pr_number=$PR_NUMBER"}
+
+      - name: Terraform Apply (if apply)
+        if: inputs.tf_action == 'apply'
+        id: deploy
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          terraform apply -auto-approve tfplan
+
+          # Try to get the ALB DNS for the environment URL
+          ALB_DNS=$(terraform output -raw alb_dns_name 2>/dev/null || echo "")
+          if [[ -n "$ALB_DNS" ]]; then
+            echo "environment_url=http://$ALB_DNS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Destroy (if destroy)
+        if: inputs.tf_action == 'destroy'
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          # Set environment-specific variables
+          ENVIRONMENT="${{ inputs.tf_workspace }}"
+          IS_EPHEMERAL="false"
+          PR_NUMBER=""
+
+          if [[ "$ENVIRONMENT" == pr-* ]]; then
+            IS_EPHEMERAL="true"
+            PR_NUMBER="${{ inputs.pr_number }}"
+          fi
+
+          terraform destroy -auto-approve \
+            -var="environment=$ENVIRONMENT" \
+            -var="doppler_token=${{ secrets.DOPPLER_TOKEN }}" \
+            -var="is_ephemeral=$IS_EPHEMERAL" \
+            ${PR_NUMBER:+-var="pr_number=$PR_NUMBER"}
+
+      - name: Delete Terraform Workspace (if destroy and ephemeral)
+        if: inputs.tf_action == 'destroy' && startsWith(inputs.tf_workspace, 'pr-')
+        working-directory: ${{ inputs.terraform_directory }}
+        run: |
+          terraform workspace select default
+          terraform workspace delete -force ${{ inputs.tf_workspace }}

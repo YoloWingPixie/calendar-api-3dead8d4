@@ -1,0 +1,137 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+  deployments: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: calendar-api
+  AWS_ROLE_ARN: arn:aws:iam::655593807337:role/github-actions-calendar-api
+
+jobs:
+  # Verify and tag image
+  verify:
+    name: Verify and Tag Image
+    runs-on: ubuntu-latest
+    environment: prod  # Can have manual approval gates
+
+    outputs:
+      image_uri: ${{ steps.verify.outputs.image_uri }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff071d4dc91bc00c4c1a7945b076 # v2.0.1
+
+      - name: Verify SHA-tagged image exists
+        id: verify
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          SHA_TAG="sha-${{ github.sha }}"
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$SHA_TAG"
+
+          echo "Verifying image: $IMAGE_URI"
+          if aws ecr describe-images \
+            --repository-name $ECR_REPOSITORY \
+            --image-ids imageTag=$SHA_TAG \
+            --region $AWS_REGION &>/dev/null; then
+            echo "✅ Image found: $IMAGE_URI"
+            echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Image not found: $IMAGE_URI"
+            echo "This commit SHA was not built and tested through the staging workflow."
+            echo "Only commits that have been through PR review and staging can be deployed to production."
+            exit 1
+          fi
+
+      - name: Tag image for production
+        run: |
+          SHA_TAG="sha-${{ github.sha }}"
+          PROD_TAG="prod-${{ github.sha }}"
+          LATEST_TAG="latest"
+
+          # Pull the SHA-tagged image
+          docker pull ${{ steps.verify.outputs.image_uri }}
+
+          # Tag it with prod- and latest
+          docker tag ${{ steps.verify.outputs.image_uri }} ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$PROD_TAG
+          docker tag ${{ steps.verify.outputs.image_uri }} ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$LATEST_TAG
+
+          # Push the new tags
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$PROD_TAG
+          docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$LATEST_TAG
+
+          echo "✅ Tagged and pushed: prod-${{ github.sha }} and latest"
+
+  # Deploy to production
+  deploy:
+    name: Deploy to Production
+    needs: verify
+    uses: ./.github/workflows/deploy-common.yml
+    with:
+      environment: prod
+      image_uri: ${{ needs.verify.outputs.image_uri }}
+      tf_workspace: prod
+      is_ephemeral: false
+      deployment_description: "Production deployment from main branch"
+    secrets: inherit
+
+  # Create release (optional)
+  release:
+    name: Create Release
+    needs: [verify, deploy]
+    if: contains(github.event.head_commit.message, '[release]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep -E '^version = ".*"$' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const version = '${{ steps.version.outputs.version }}';
+            const prodUrl = '${{ needs.deploy.outputs.environment_url }}';
+
+            const release = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${version}`,
+              name: `Release v${version}`,
+              body: `## Calendar API v${version}
+
+              **Production URL:** ${prodUrl}
+              **Commit:** ${{ github.sha }}
+
+              ### What's Changed
+              See the [full changelog](https://github.com/${{ github.repository }}/compare/v${previousVersion}...v${version})`,
+              draft: false,
+              prerelease: false
+            });
+
+            console.log(`Created release: ${release.data.html_url}`);
