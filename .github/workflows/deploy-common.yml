@@ -79,7 +79,7 @@ jobs:
       - name: Run Migration Task
         run: |
           CLUSTER="calendar-api-${{ inputs.tf_workspace }}"
-          TASK_DEFINITION="${{ inputs.tf_workspace }}-calendar-api-migration"
+          TASK_DEFINITION="calendar-api-${{ inputs.tf_workspace }}-migration"
 
           # Get subnet IDs from the VPC
           VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=calendar-api-${{ inputs.tf_workspace }}-vpc" --query "Vpcs[0].VpcId" --output text)
