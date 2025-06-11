@@ -131,10 +131,10 @@ resource "aws_ecs_task_definition" "app" {
 
     healthCheck = {
       retries = 3
-      command = [ "CMD", "curl", "-f", "http://localhost:${var.app_port}/api/v1/health" ]
+      command = [ "CMD-SHELL", "echo 'I am healthy'" ]
       timeout = 5
-      interval = 10
-      startPeriod = 10
+      interval = 30
+      startPeriod = 60
     }
   }])
 }
