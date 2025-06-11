@@ -16,6 +16,10 @@ terraform {
       source  = "DopplerHQ/doppler"
       version = "~> 1.17"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 }
 
