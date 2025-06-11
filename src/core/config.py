@@ -4,6 +4,7 @@ import json
 import os
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,7 +29,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize settings with Doppler JSON parsing support."""
         # Check if running in ECS with Doppler secrets
         doppler_json = os.getenv("DOPPLER_SECRETS_JSON")
