@@ -2,8 +2,11 @@ name: Production Deployment
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
 
 permissions:
   contents: read
