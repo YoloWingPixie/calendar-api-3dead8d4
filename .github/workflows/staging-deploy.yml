@@ -118,7 +118,7 @@ jobs:
 
           # Basic health check
           if [[ -n "$STAGING_URL" ]]; then
-            curl -f "$STAGING_URL/health" || echo "Health check failed"
+            curl -f "$STAGING_URL/api/v1/health" || echo "Health check failed"
           fi
 
           # Add actual integration test commands here

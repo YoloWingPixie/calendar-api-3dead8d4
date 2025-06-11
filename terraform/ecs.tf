@@ -130,11 +130,11 @@ resource "aws_ecs_task_definition" "app" {
     }
 
     healthCheck = {
-      retries = 3
-      command = [ "CMD-SHELL", "echo 'I am healthy'" ]
-      timeout = 5
-      interval = 30
-      startPeriod = 60
+      command     = ["CMD-SHELL", "exit 0"]
+      interval    = 10
+      timeout     = 5
+      retries     = 3
+      startPeriod = 10
     }
   }])
 }
