@@ -27,6 +27,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
@@ -48,7 +50,7 @@ jobs:
           MERGE_SHA="${{ github.sha }}"
 
           # Try to find the second parent of the merge commit (the PR head)
-          PR_HEAD_SHA=$(git rev-parse ${MERGE_SHA}^2 2>/dev/null || echo "")
+          PR_HEAD_SHA=$(git rev-parse "${MERGE_SHA}^2" 2>/dev/null || echo "")
 
           if [[ -n "$PR_HEAD_SHA" ]]; then
             echo "Found PR head SHA: $PR_HEAD_SHA"
@@ -74,7 +76,7 @@ jobs:
             echo "This commit SHA was not built and tested through the staging workflow."
             echo "Only commits that have been through PR review and staging can be deployed to production."
             echo "Merge SHA: $MERGE_SHA"
-            echo "PR Head SHA: $PR_HEAD_SHA"
+            echo "PR Head SHA: $SHA_TO_DEPLOY"
             exit 1
           fi
 
