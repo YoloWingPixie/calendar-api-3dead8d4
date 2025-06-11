@@ -22,7 +22,7 @@ jobs:
   verify:
     name: Verify And Tag Image
     runs-on: ubuntu-latest
-    environment: prod
+    environment: dev
     outputs:
       image_uri: ${{ steps.verify.outputs.image_uri }}
       sha_to_deploy: ${{ steps.verify.outputs.sha_to_deploy }}
@@ -69,7 +69,7 @@ jobs:
     name: Deploy To Production
     uses: ./.github/workflows/deploy-common.yml
     with:
-      environment: prod
+      environment: dev
       image_uri: ${{ needs.verify.outputs.image_uri }}
       tf_workspace: prod
       is_ephemeral: false
