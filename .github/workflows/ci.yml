@@ -28,6 +28,14 @@ jobs:
         with:
           fetch-depth: 0  # Need full history
 
+      - name: Setup Node.js
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          node-version: 20
+
+      - name: Install semver
+        run: npm install semver
+
       - name: Checkout base branch
         run: |
           git fetch origin ${{ github.event.pull_request.base.ref }}
@@ -39,30 +47,20 @@ jobs:
           PR_VERSION=$(grep -E '^version = ".*"$' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
           echo "PR version: $PR_VERSION"
 
-          # Validate semver format (X.Y.Z where X, Y, Z are numbers)
-          if ! [[ "$PR_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Version '$PR_VERSION' is not valid semver format (X.Y.Z)"
-            exit 1
-          fi
-
           # Get base branch version
           BASE_VERSION=$(git show origin/${{ github.event.pull_request.base.ref }}:pyproject.toml | grep -E '^version = ".*"$' | sed 's/version = "\(.*\)"/\1/')
           echo "Base version: $BASE_VERSION"
 
-          # Compare versions using sort -V for proper semantic version comparison
-          compare_versions() {
-            local ver1=$1
-            local ver2=$2
+          # Validate semver format
+          IS_VALID=$(node -e "const sv = require('semver'); console.log(sv.valid('$PR_VERSION') !== null)")
+          if [[ "$IS_VALID" != "true" ]]; then
+            echo "❌ Version '$PR_VERSION' is not valid semver format"
+            exit 1
+          fi
 
-            # Using sort -V (version sort) which handles semantic versioning correctly
-            # If ver1 is not greater than ver2, or they're equal, return 1
-            if [[ "$(printf '%s\n' "$ver1" "$ver2" | sort -V | head -n1)" != "$ver1" || "$ver1" == "$ver2" ]]; then
-              return 1  # ver1 is not greater than ver2
-            fi
-            return 0  # ver1 is greater than ver2
-          }
-
-          if compare_versions "$PR_VERSION" "$BASE_VERSION"; then
+          # Compare versions
+          IS_GREATER=$(node -e "console.log(require('semver').gt('$PR_VERSION', '$BASE_VERSION'))")
+          if [[ "$IS_GREATER" == "true" ]]; then
             echo "✅ Version bump validated: $BASE_VERSION → $PR_VERSION"
             echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
             echo "pr_version=$PR_VERSION" >> $GITHUB_OUTPUT
