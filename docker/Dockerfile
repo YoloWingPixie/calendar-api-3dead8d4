@@ -62,10 +62,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # Switch to non-root user
 USER appuser
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
-
 # Expose port
 EXPOSE 8000
 
