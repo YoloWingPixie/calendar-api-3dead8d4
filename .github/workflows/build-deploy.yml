@@ -1,16 +1,18 @@
-name: Build and Push Docker Image
+name: Build and Deploy
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+  push:
+    branches: [main, develop, release/*]
 
 permissions:
   contents: read
   pull-requests: write
-  id-token: write  # Required for AWS OIDC
-  actions: write  # Required to trigger other workflows
+  id-token: write
+  actions: write
+  deployments: write
 
 env:
   AWS_REGION: us-east-1
@@ -18,20 +20,45 @@ env:
   AWS_ROLE_ARN: arn:aws:iam::655593807337:role/github-actions-calendar-api
 
 jobs:
-  determine-tag:
-    name: Determine Docker Tags
+  # First, ensure CI passes
+  ci-gate:
+    name: CI Gate
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Wait for CI
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          check-name: 'test'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+  # Determine tags and whether to deploy
+  determine-strategy:
+    name: Determine Build Strategy
+    runs-on: ubuntu-latest
+    needs: [ci-gate]
+    if: always() && (needs.ci-gate.result == 'success' || needs.ci-gate.result == 'skipped')
     outputs:
       tags: ${{ steps.tags.outputs.tags }}
       version: ${{ steps.version.outputs.version }}
       should_deploy: ${{ steps.tags.outputs.should_deploy }}
       environment: ${{ steps.tags.outputs.environment }}
+      image_uri: ${{ steps.tags.outputs.image_uri }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Need full history for branch detection
+          fetch-depth: 0
+
+      - name: Configure AWS credentials for ECR query
+        if: contains(github.ref, 'release/') || (github.event_name == 'push' && contains(github.ref, 'release/'))
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Extract version from pyproject.toml
         id: version
@@ -39,13 +66,6 @@ jobs:
           VERSION=$(grep -E '^version = ".*"$' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
           echo "Version found: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Configure AWS credentials for ECR query
-        if: contains(github.ref, 'release/')
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
 
       - name: Determine tags and deployment
         id: tags
@@ -72,12 +92,6 @@ jobs:
               fi
               SHOULD_DEPLOY="true"
               ENVIRONMENT="pr-${PR_NUMBER}"
-            elif [[ "$BASE_BRANCH" == release/* ]]; then
-              # PR to release branch
-              TAGS="${BASE_TAG}-dev"
-            else
-              # PR to other branches
-              TAGS="${BASE_TAG}-pr-${PR_NUMBER}"
             fi
           else
             # Push to branch
@@ -116,9 +130,6 @@ jobs:
               TAGS="${BASE_TAG}-dev"
               SHOULD_DEPLOY="true"
               ENVIRONMENT="dev"
-            else
-              # Other branches
-              TAGS="${BASE_TAG}-dev"
             fi
           fi
 
@@ -126,15 +137,19 @@ jobs:
           echo "Should deploy: $SHOULD_DEPLOY"
           echo "Environment: $ENVIRONMENT"
 
+          # Set the first tag as primary for image URI
+          PRIMARY_TAG=$(echo $TAGS | cut -d',' -f1)
+          echo "image_uri=655593807337.dkr.ecr.us-east-1.amazonaws.com/${{ env.ECR_REPOSITORY }}:${PRIMARY_TAG}" >> $GITHUB_OUTPUT
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
           echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
 
-  build-and-push:
-    name: Build and Push to ECR
+  # Build and push Docker image
+  build:
+    name: Build and Push Image
     runs-on: ubuntu-latest
-    needs: determine-tag
-    if: needs.determine-tag.outputs.tags != ''
+    needs: determine-strategy
+    if: needs.determine-strategy.outputs.tags != ''
 
     steps:
       - uses: actions/checkout@v4
@@ -142,7 +157,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
@@ -159,30 +174,12 @@ jobs:
           file: docker/Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.determine-tag.outputs.tags }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.determine-strategy.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
           build-args: |
-            VERSION=${{ needs.determine-tag.outputs.version }}
-
-      - name: Create deployment artifact
-        if: needs.determine-tag.outputs.should_deploy == 'true'
-        run: |
-          echo '{
-            "image": "${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.determine-tag.outputs.tags }}",
-            "environment": "${{ needs.determine-tag.outputs.environment }}",
-            "version": "${{ needs.determine-tag.outputs.version }}",
-            "commit": "${{ github.sha }}"
-          }' > deployment.json
-
-      - name: Upload deployment artifact
-        if: needs.determine-tag.outputs.should_deploy == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: deployment-info
-          path: deployment.json
-          retention-days: 7
+            VERSION=${{ needs.determine-strategy.outputs.version }}
 
       - name: Comment on PR with image details
         if: github.event_name == 'pull_request'
@@ -192,9 +189,8 @@ jobs:
             const pr_number = context.issue.number;
             const registry = '${{ steps.login-ecr.outputs.registry }}';
             const repository = '${{ env.ECR_REPOSITORY }}';
-            const tags = '${{ needs.determine-tag.outputs.tags }}'.split(',');
+            const tags = '${{ needs.determine-strategy.outputs.tags }}'.split(',');
             const aws_region = '${{ env.AWS_REGION }}';
-            const aws_account = registry.split('.')[0];
 
             // Delete previous comments from this workflow
             const { data: comments } = await github.rest.issues.listComments({
@@ -240,21 +236,12 @@ jobs:
               body += '```\n';
             }
 
-            body += '\n### Run Locally:\n';
-            body += '```bash\n';
-            body += '# Example with environment variables\n';
-            body += 'docker run -p 8000:8000 \\\n';
-            body += '  -e DATABASE_URL="postgresql://user:pass@host:5432/db" \\\n';
-            body += '  ' + registry + '/' + repository + ':' + tags[0] + '\n';
-            body += '```\n';
-
-            if ('${{ needs.determine-tag.outputs.should_deploy }}' === 'true') {
-              body += '\n### 🚀 Deployment\n';
-              body += 'This image will be automatically deployed to the **`' + '${{ needs.determine-tag.outputs.environment }}' + '`** environment.\n';
-            }
-
             body += '\n---\n';
             body += '_Built from commit: ' + context.sha.substring(0, 7) + '_\n';
+
+            if ('${{ needs.determine-strategy.outputs.should_deploy }}' === 'true') {
+              body += '\n🚀 **Deployment will begin shortly to environment: `${{ needs.determine-strategy.outputs.environment }}`**\n';
+            }
 
             // Create new comment
             await github.rest.issues.createComment({
@@ -264,14 +251,18 @@ jobs:
               body: body
             });
 
-  trigger-deployment:
-    name: Trigger Deployment
+  # Deploy to environment
+  deploy:
+    name: Deploy to ${{ needs.determine-strategy.outputs.environment }}
     runs-on: ubuntu-latest
-    needs: [determine-tag, build-and-push]
-    if: needs.determine-tag.outputs.should_deploy == 'true'
+    needs: [determine-strategy, build]
+    if: needs.determine-strategy.outputs.should_deploy == 'true'
+    environment: ${{ needs.determine-strategy.outputs.environment }}
 
     steps:
-      - name: Trigger deployment workflow
+      - uses: actions/checkout@v4
+
+      - name: Deploy via Terraform
         uses: actions/github-script@v7
         with:
           script: |
@@ -281,8 +272,8 @@ jobs:
               workflow_id: 'cd.yml',
               ref: context.ref,
               inputs: {
-                environment: '${{ needs.determine-tag.outputs.environment }}',
-                image_tag: '${{ needs.determine-tag.outputs.tags }}',
-                version: '${{ needs.determine-tag.outputs.version }}'
+                environment: '${{ needs.determine-strategy.outputs.environment }}',
+                image_tag: '${{ needs.determine-strategy.outputs.tags }}',
+                version: '${{ needs.determine-strategy.outputs.version }}'
               }
             });
