@@ -26,9 +26,9 @@ variable "project_name" {
 }
 
 variable "vpc_cidr" {
-  description = "CIDR block for VPC (/28 is smallest allowed, providing 16 IPs)"
+  description = "CIDR block for VPC"
   type        = string
-  default     = "10.0.0.0/28"
+  default     = "10.0.0.0/24"
 }
 
 variable "availability_zones" {

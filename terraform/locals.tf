@@ -3,7 +3,7 @@
 
 locals {
   # Canonical environments - these have their own Doppler configs
-  canonical_environments = ["dev", "staging", "prod"]
+  canonical_environments = ["dev", "stg", "staging", "prod"]
 
   # Determine if current environment is canonical
   is_canonical_environment = contains(local.canonical_environments, var.environment)

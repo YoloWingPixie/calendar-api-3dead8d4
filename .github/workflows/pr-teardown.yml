@@ -15,9 +15,21 @@ env:
   AWS_ROLE_ARN: arn:aws:iam::655593807337:role/github-actions-calendar-api
 
 jobs:
+  # Get dev environment secrets
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      doppler_token: ${{ steps.get_token.outputs.token }}
+    steps:
+      - id: get_token
+        run: echo "::add-mask::${{ secrets.DOPPLER_TOKEN }}" && echo "token=${{ secrets.DOPPLER_TOKEN }}" >> $GITHUB_OUTPUT
+
   # Teardown ephemeral environment
   teardown:
     name: Teardown Ephemeral Environment
+    needs: setup
     # Skip for PRs from protected branches (same logic as ephemeral-deploy)
     if: |
       github.actor != 'dependabot[bot]' &&
@@ -33,13 +45,13 @@ jobs:
       pr_number: ${{ github.event.number }}
     secrets:
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::655593807337:role/github-actions-calendar-api' }}
-      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_TOKEN: ${{ needs.setup.outputs.doppler_token }}
 
   # Update deployment status and comment
   cleanup:
     name: Update Status
-    needs: teardown
-    if: always()
+    needs: [setup, teardown]
+    if: always() && needs.teardown.result != 'skipped'
     runs-on: ubuntu-latest
 
     steps:

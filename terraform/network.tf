@@ -21,7 +21,7 @@ resource "aws_internet_gateway" "main" {
 }
 
 # Public Subnets (for ALB, ECS, and RDS)
-# Using /30 subnets to split the /28 VPC into 4 subnets (4 IPs each)
+# Using /26 subnets to split the /24 VPC (64 IPs each)
 resource "aws_subnet" "public" {
   count             = length(var.availability_zones)
   vpc_id            = aws_vpc.main.id
