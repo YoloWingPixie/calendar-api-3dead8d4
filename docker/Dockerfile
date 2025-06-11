@@ -39,9 +39,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Stage 2: Runtime
 FROM base
 
-# Install runtime dependencies (PostgreSQL client)
+# Install runtime dependencies (PostgreSQL client and curl for health checks)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

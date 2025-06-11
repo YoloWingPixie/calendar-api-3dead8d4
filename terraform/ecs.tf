@@ -131,7 +131,7 @@ resource "aws_ecs_task_definition" "app" {
     }
 
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -f http://localhost:${var.app_port}/api/v1/health || exit 1"]
+      command     = ["CMD-SHELL", "curl -f http://127.0.0.1:${var.app_port}/api/v1/health || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
@@ -158,6 +158,16 @@ resource "aws_ecs_service" "app" {
     target_group_arn = aws_lb_target_group.app.arn
     container_name   = var.project_name
     container_port   = var.app_port
+  }
+
+  deployment_configuration {
+    maximum_percent         = 200
+    minimum_healthy_percent = 100
+
+    deployment_circuit_breaker {
+      enable   = true
+      rollback = true
+    }
   }
 
   depends_on = [
