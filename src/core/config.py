@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:
         """Initialize settings with Doppler JSON parsing support."""
         # Check if running in ECS with Doppler secrets
         doppler_json = os.getenv("DOPPLER_SECRETS_JSON")
