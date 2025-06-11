@@ -89,6 +89,12 @@ tasks:
     cmds:
       - docker-compose -f docker/docker-compose.yml logs -f
 
+  docker:run:
+    desc: Build and run the Docker container standalone
+    cmds:
+      - docker build -t calendar-api:local -f docker/Dockerfile .
+      - docker run --rm -it -p 8000:8000 --name calendar-api-local calendar-api:local
+
   ci:
     desc: Run CI tasks
     deps: [lint, typecheck, test, format, pre-commit:run]
