@@ -45,35 +45,16 @@ jobs:
         run: |
           # Get current version from PR branch
           PR_VERSION=$(grep -E '^version = ".*"$' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "PR version: $PR_VERSION"
 
           # Get base branch version
           BASE_VERSION=$(git show origin/${{ github.event.pull_request.base.ref }}:pyproject.toml | grep -E '^version = ".*"$' | sed 's/version = "\(.*\)"/\1/')
-          echo "Base version: $BASE_VERSION"
 
-          # Validate and compare versions using Python
-          python -c "
-import sys
-from packaging.version import Version, InvalidVersion
+          # Export for Python script
+          export PR_VERSION
+          export BASE_VERSION
 
-pr_version = '$PR_VERSION'
-base_version = '$BASE_VERSION'
-
-try:
-    pr_ver = Version(pr_version)
-    base_ver = Version(base_version)
-except InvalidVersion as e:
-    print(f'❌ Invalid version format: {e}')
-    sys.exit(1)
-
-if pr_ver > base_ver:
-    print(f'✅ Version bump validated: {base_version} → {pr_version}')
-else:
-    print(f'❌ Version must be higher than base branch version ({base_version})')
-    sys.exit(1)
-"
-
-          if [ $? -eq 0 ]; then
+          # Run version check script
+          if python .github/scripts/check_version_bump.py; then
             echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
             echo "pr_version=$PR_VERSION" >> $GITHUB_OUTPUT
           else
