@@ -65,28 +65,6 @@ resource "aws_db_instance" "main" {
   }
 }
 
-# Store connection info in Parameter Store for Doppler to read
-resource "aws_ssm_parameter" "db_host" {
-  name  = "/${var.project_name}/${var.environment}/db/host"
-  type  = "String"
-  value = aws_db_instance.main.address
-
-  tags = {
-    Name        = "${var.project_name}-${var.environment}-db-host"
-    Environment = var.environment
-  }
-}
-
-resource "aws_ssm_parameter" "db_port" {
-  name  = "/${var.project_name}/${var.environment}/db/port"
-  type  = "String"
-  value = aws_db_instance.main.port
-
-  tags = {
-    Name        = "${var.project_name}-${var.environment}-db-port"
-    Environment = var.environment
-  }
-}
-
 # Note: The actual database password should be managed through Doppler
 # This password is only for initial RDS creation
+# Connection info is automatically synced to Doppler via doppler.tf
