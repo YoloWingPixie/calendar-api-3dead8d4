@@ -70,68 +70,63 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Get Database Connection Info
-        id: db_info
+      - name: Run Migration Task
         run: |
-          # Get Doppler config based on environment
-          DOPPLER_CONFIG="${{ inputs.environment }}"
-          if [[ "${{ inputs.environment }}" != "prod" ]] && [[ "${{ inputs.environment }}" != "stg" ]]; then
-            DOPPLER_CONFIG="dev"
-          fi
+          CLUSTER="calendar-api-${{ inputs.tf_workspace }}"
+          TASK_DEFINITION="${{ inputs.tf_workspace }}-calendar-api-migration"
 
-          # Get secrets from AWS Secrets Manager (synced from Doppler)
-          SECRET_NAME="/calendar-api/${DOPPLER_CONFIG}/"
-          echo "Getting secrets from: $SECRET_NAME"
+          # Get subnet IDs from the VPC
+          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=calendar-api-${{ inputs.tf_workspace }}-vpc" --query "Vpcs[0].VpcId" --output text)
+          SUBNET_IDS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*private*" --query "Subnets[*].SubnetId" --output text | tr '\t' ',')
 
-          SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$SECRET_NAME" --query SecretString --output text)
+          # Get security group ID
+          SECURITY_GROUP=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=calendar-api-${{ inputs.tf_workspace }}-ecs-tasks-*" --query "SecurityGroups[0].GroupId" --output text)
 
-          # Extract DATABASE_URL (using TF_VAR_ prefix from Doppler)
-          DATABASE_URL=$(echo "$SECRET_JSON" | jq -r '.TF_VAR_database_url')
+          echo "Running database migration task..."
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $CLUSTER \
+            --task-definition $TASK_DEFINITION \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --query "tasks[0].taskArn" \
+            --output text)
 
-          if [[ -z "$DATABASE_URL" || "$DATABASE_URL" == "null" ]]; then
-            echo "ERROR: DATABASE_URL not found in secrets"
+          echo "Migration task started: $TASK_ARN"
+          echo "Waiting for migration to complete..."
+
+          # Wait for task to complete
+          aws ecs wait tasks-stopped --cluster $CLUSTER --tasks $TASK_ARN
+
+          # Check task exit status
+          EXIT_CODE=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN --query "tasks[0].containers[0].exitCode" --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code: $EXIT_CODE"
+            echo "Fetching logs..."
+
+            # Get log stream name
+            TASK_ID=$(echo $TASK_ARN | rev | cut -d'/' -f1 | rev)
+            LOG_STREAM="migration/migration/$TASK_ID"
+
+            # Fetch recent logs
+            aws logs get-log-events \
+              --log-group-name "/ecs/calendar-api-${{ inputs.tf_workspace }}" \
+              --log-stream-name "$LOG_STREAM" \
+              --start-from-head \
+              --limit 100 \
+              --query "events[*].message" \
+              --output text
+
             exit 1
           fi
 
-          # Mask the database URL for security
-          echo "::add-mask::$DATABASE_URL"
-          echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Run Alembic Migrations
-        run: |
-          echo "Running database migrations for environment: ${{ inputs.environment }}"
-          uv run alembic upgrade head
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-
-      - name: Verify Migration Status
-        run: |
-          echo "Checking current database revision..."
-          uv run alembic current
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
+          echo "Migration completed successfully!"
 
   # Common post deployment tasks
   post_deploy:
