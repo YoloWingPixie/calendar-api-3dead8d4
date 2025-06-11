@@ -1,13 +1,27 @@
+# Import our app config and models
+import json
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-
-# Import our app config and models
 from src.core.config import settings
 from src.models import Calendar, CalendarEvent, User  # noqa: F401
 from src.models.base import Base
+
+# Handle Doppler secrets for migrations
+doppler_json = os.getenv("DOPPLER_SECRETS_JSON")
+if doppler_json:
+    try:
+        doppler_secrets = json.loads(doppler_json)
+        # Look for DATABASE_URL in various possible keys
+        for key in ["DATABASE_URL", "TF_VAR_database_url", "TF_VAR_DATABASE_URL"]:
+            if key in doppler_secrets:
+                os.environ["DATABASE_URL"] = doppler_secrets[key]
+                break
+    except json.JSONDecodeError:
+        pass
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
