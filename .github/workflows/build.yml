@@ -8,8 +8,9 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
   id-token: write  # Required for AWS OIDC
+  actions: write  # Required to trigger other workflows
 
 env:
   AWS_REGION: us-east-1
