@@ -1,0 +1,75 @@
+name: PR Environment Teardown
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [develop]  # Only for PRs targeting develop
+
+permissions:
+  contents: read
+  id-token: write
+  deployments: write
+  pull-requests: write
+
+env:
+  AWS_ROLE_ARN: arn:aws:iam::655593807337:role/github-actions-calendar-api
+
+jobs:
+  # Teardown ephemeral environment
+  teardown:
+    name: Teardown Ephemeral Environment
+    # Skip for PRs from protected branches (same logic as ephemeral-deploy)
+    if: |
+      github.actor != 'dependabot[bot]' &&
+      github.head_ref != 'main' &&
+      github.head_ref != 'develop' &&
+      !startsWith(github.head_ref, 'release/')
+    uses: ./.github/workflows/terraform-deployment.yml
+    with:
+      environment_name: pr-${{ github.event.number }}-teardown
+      tf_action: destroy
+      tf_workspace: pr-${{ github.event.number }}
+      terraform_directory: ./terraform
+      pr_number: ${{ github.event.number }}
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::655593807337:role/github-actions-calendar-api' }}
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+  # Update deployment status and comment
+  cleanup:
+    name: Update Status
+    needs: teardown
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Update deployment status
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const deployments = await github.rest.repos.listDeployments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              environment: 'pr-${{ github.event.number }}'
+            });
+
+            for (const deployment of deployments.data) {
+              await github.rest.repos.createDeploymentStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: deployment.id,
+                state: 'inactive',
+                description: 'PR closed - environment destroyed'
+              });
+            }
+
+      - name: Comment on PR
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: ${{ github.event.number }},
+              body: '🧹 **Ephemeral environment `pr-${{ github.event.number }}` has been destroyed.**'
+            });

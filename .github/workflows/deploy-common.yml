@@ -1,0 +1,143 @@
+name: Common Deployment Tasks (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Environment name (e.g., pr-123, stg, prod)"
+        required: true
+        type: string
+      image_uri:
+        description: "Docker image URI to deploy"
+        required: true
+        type: string
+      tf_workspace:
+        description: "Terraform workspace name"
+        required: true
+        type: string
+      is_ephemeral:
+        description: "Whether this is an ephemeral environment"
+        required: false
+        type: boolean
+        default: false
+      pr_number:
+        description: "PR number for ephemeral environments"
+        required: false
+        type: number
+      comment_on_pr:
+        description: "Whether to comment deployment URL on PR"
+        required: false
+        type: boolean
+        default: false
+      deployment_description:
+        description: "Description for deployment record"
+        required: false
+        type: string
+        default: "Deployment"
+    outputs:
+      environment_url:
+        description: "The deployed environment URL"
+        value: ${{ jobs.post_deploy.outputs.environment_url }}
+
+permissions:
+  id-token: write
+  contents: read
+  deployments: write
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::655593807337:role/github-actions-calendar-api
+
+jobs:
+  # Deploy infrastructure
+  deploy:
+    name: Deploy Infrastructure
+    uses: ./.github/workflows/terraform-deployment.yml
+    with:
+      environment_name: ${{ inputs.environment }}
+      tf_action: apply
+      tf_workspace: ${{ inputs.tf_workspace }}
+      container_image_uri: ${{ inputs.image_uri }}
+      terraform_directory: ./terraform
+      pr_number: ${{ inputs.pr_number }}
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::655593807337:role/github-actions-calendar-api' }}
+      DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+
+  # Common post deployment tasks
+  post_deploy:
+    name: Post Deployment Tasks
+    needs: deploy
+    runs-on: ubuntu-latest
+    outputs:
+      environment_url: ${{ steps.get_url.outputs.url }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update ECS Service
+        run: |
+          CLUSTER="calendar-api-${{ inputs.tf_workspace }}"
+          aws ecs update-service \
+            --cluster $CLUSTER \
+            --service calendar-api \
+            --force-new-deployment || echo "Service update failed - may not exist yet"
+
+          # Wait for service to stabilize
+          echo "Waiting for ECS service to stabilize..."
+          aws ecs wait services-stable \
+            --cluster $CLUSTER \
+            --services calendar-api \
+            --region ${{ env.AWS_REGION }} || echo "Service stabilization timeout"
+
+      - name: Get environment URL
+        id: get_url
+        run: |
+          ALB_NAME="calendar-api-${{ inputs.tf_workspace }}"
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names $ALB_NAME \
+            --query "LoadBalancers[0].DNSName" \
+            --output text 2>/dev/null || echo "")
+
+          if [[ "$ALB_DNS" != "" && "$ALB_DNS" != "None" ]]; then
+            # Use HTTPS for production, HTTP for others
+            PROTOCOL="http"
+            if [[ "${{ inputs.environment }}" == "prod" ]]; then
+              PROTOCOL="https"
+            fi
+            echo "url=${PROTOCOL}://$ALB_DNS" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create deployment record
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const env = '${{ inputs.environment }}';
+            const isProduction = env === 'prod';
+            const isTransient = '${{ inputs.is_ephemeral }}' === 'true';
+
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              task: 'deploy',
+              auto_merge: false,
+              required_contexts: [],
+              environment: env,
+              description: '${{ inputs.deployment_description }}',
+              transient_environment: isTransient,
+              production_environment: isProduction
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'success',
+              environment_url: '${{ steps.get_url.outputs.url }}',
+              description: 'Deployment completed successfully'
+            });

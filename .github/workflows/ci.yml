@@ -49,35 +49,17 @@ jobs:
           BASE_VERSION=$(git show origin/${{ github.event.pull_request.base.ref }}:pyproject.toml | grep -E '^version = ".*"$' | sed 's/version = "\(.*\)"/\1/')
           echo "Base version: $BASE_VERSION"
 
-          # Compare versions
+          # Compare versions using sort -V for proper semantic version comparison
           compare_versions() {
             local ver1=$1
             local ver2=$2
 
-            # Split versions into components
-            IFS='.' read -r major1 minor1 patch1 <<< "$ver1"
-            IFS='.' read -r major2 minor2 patch2 <<< "$ver2"
-
-            # Compare major
-            if [ "$major1" -gt "$major2" ]; then
-              return 0
-            elif [ "$major1" -lt "$major2" ]; then
-              return 1
+            # Using sort -V (version sort) which handles semantic versioning correctly
+            # If ver1 is not greater than ver2, or they're equal, return 1
+            if [[ "$(printf '%s\n' "$ver1" "$ver2" | sort -V | head -n1)" != "$ver1" || "$ver1" == "$ver2" ]]; then
+              return 1  # ver1 is not greater than ver2
             fi
-
-            # Compare minor
-            if [ "$minor1" -gt "$minor2" ]; then
-              return 0
-            elif [ "$minor1" -lt "$minor2" ]; then
-              return 1
-            fi
-
-            # Compare patch
-            if [ "$patch1" -gt "$patch2" ]; then
-              return 0
-            else
-              return 1
-            fi
+            return 0  # ver1 is greater than ver2
           }
 
           if compare_versions "$PR_VERSION" "$BASE_VERSION"; then
