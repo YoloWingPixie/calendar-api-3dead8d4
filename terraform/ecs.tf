@@ -160,14 +160,12 @@ resource "aws_ecs_service" "app" {
     container_port   = var.app_port
   }
 
-  deployment_configuration {
-    maximum_percent         = 200
-    minimum_healthy_percent = 100
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
 
-    deployment_circuit_breaker {
-      enable   = true
-      rollback = true
-    }
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
 
   depends_on = [
