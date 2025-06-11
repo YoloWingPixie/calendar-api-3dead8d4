@@ -82,17 +82,29 @@ jobs:
       - name: Update ECS Service
         run: |
           CLUSTER="calendar-api-${{ inputs.tf_workspace }}"
-          aws ecs update-service \
-            --cluster $CLUSTER \
-            --service calendar-api \
-            --force-new-deployment || echo "Service update failed - may not exist yet"
 
-          # Wait for service to stabilize
-          echo "Waiting for ECS service to stabilize..."
-          aws ecs wait services-stable \
-            --cluster $CLUSTER \
-            --services calendar-api \
-            --region ${{ env.AWS_REGION }} || echo "Service stabilization timeout"
+          # Only force new deployment if the service exists and is stable
+          if aws ecs describe-services --cluster $CLUSTER --services calendar-api --query 'services[0].status' --output text | grep -q "ACTIVE"; then
+            echo "Waiting for any existing deployments to complete..."
+            aws ecs wait services-stable \
+              --cluster $CLUSTER \
+              --services calendar-api \
+              --region ${{ env.AWS_REGION }} || true
+
+            echo "Forcing new deployment..."
+            aws ecs update-service \
+              --cluster $CLUSTER \
+              --service calendar-api \
+              --force-new-deployment
+
+            echo "Waiting for service to stabilize..."
+            aws ecs wait services-stable \
+              --cluster $CLUSTER \
+              --services calendar-api \
+              --region ${{ env.AWS_REGION }} || echo "Service stabilization timeout"
+          else
+            echo "Service not active yet, skipping forced deployment"
+          fi
 
       - name: Get environment URL
         id: get_url
