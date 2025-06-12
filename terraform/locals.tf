@@ -11,6 +11,9 @@ locals {
   # Doppler config to use (non-canonical environments use dev)
   doppler_config = var.environment == "prod" ? "prd" : (local.is_canonical_environment ? var.environment : "dev")
 
+  # AWS Secrets Manager config name to use (matches var.environment)
+  aws_sm_config_name = local.is_canonical_environment ? var.environment : "dev"
+
   # Environment configuration
   environment_config = {
     # Debug mode is enabled for all non-prod environments

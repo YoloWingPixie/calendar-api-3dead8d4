@@ -5,7 +5,7 @@
 # The secret name pattern in AWS SM should be: /doppler/3dead8d4/<environment>
 # Non-canonical environments use the dev Doppler config (defined in locals.tf)
 data "aws_secretsmanager_secret" "doppler_sync" {
-  name = "/calendar-api/${local.doppler_config}/"
+  name = "/calendar-api/${local.aws_sm_config_name}/"
 }
 
 # Get the current version of the secret
