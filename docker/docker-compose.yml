@@ -23,7 +23,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       DEBUG: ${DEBUG:-true}
     ports:
-      - "8000:8000"
+      - "8012:8000"
     volumes:
       - ../src:/app/src
       - /app/.venv

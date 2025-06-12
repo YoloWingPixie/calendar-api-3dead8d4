@@ -18,11 +18,11 @@ import json
 import logging
 import os
 
-from pydantic import Field, PostgresDsn
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
-def get_database_url() -> PostgresDsn:
+def get_database_url() -> str:
     """
     Gets the database URL, prioritizing the Doppler JSON secret.
     This logic directly mirrors the working implementation in alembic/env.py
@@ -36,7 +36,7 @@ def get_database_url() -> PostgresDsn:
             for key in ["DATABASE_URL", "TF_VAR_database_url", "TF_VAR_DATABASE_URL"]:
                 if key in secrets and secrets[key]:
                     logging.info(f"Using database URL from Doppler secret key: {key}")
-                    return PostgresDsn(str(secrets[key]))
+                    return str(secrets[key])
             raise ValueError(
                 "DATABASE_URL not found in DOPPLER_SECRETS_JSON. "
                 f"Available keys: {list(secrets.keys())}"
@@ -47,7 +47,7 @@ def get_database_url() -> PostgresDsn:
     database_url = os.getenv("DATABASE_URL")
     if database_url:
         logging.info("Using database URL from DATABASE_URL environment variable.")
-        return PostgresDsn(database_url)
+        return database_url
 
     raise ValueError(
         "Database URL not configured. Set DATABASE_URL or DOPPLER_SECRETS_JSON."
@@ -71,7 +71,7 @@ class AppSettings(BaseSettings):
     port: int = 8000
 
     # Database settings
-    database_url: PostgresDsn = Field(default_factory=get_database_url)
+    database_url: str = Field(default_factory=get_database_url)
     database_echo: bool = Field(default=False)
     database_pool_disabled: bool = Field(default=False)
 
