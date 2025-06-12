@@ -1,19 +1,14 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Go
+*.test
+*.out
+vendor/
+bin/
+*.exe
+*.exe~
+*.dll
 *.so
-.Python
-.pytest_cache/
-.coverage
-.mypy_cache/
-.ruff_cache/
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
-ENV/
+*.dylib
+coverage.out
 
 # Development
 .git/
@@ -40,9 +35,7 @@ CLAUDE.md
 
 # Testing
 tests/
-conftest.py
-pytest.ini
-.coverage*
+*_test.go
 
 # Infrastructure
 terraform/
@@ -59,6 +52,14 @@ Thumbs.db
 Taskfile.yml
 .pre-commit-config.yaml
 .task/
+.golangci.yml
 
-# Don't include uv cache
-.uv/
+# Build artifacts
+bin/
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp

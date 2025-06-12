@@ -1,63 +1,53 @@
-# Multi-stage Dockerfile for Calendar API
-# Based on ADR-007: Using python:3.13-slim for balance of size and functionality
+# Multi-stage Dockerfile for Calendar API (Go)
+# Stage 1: Build the Go application
+FROM golang:1.24-alpine AS builder
 
-FROM python:3.13-slim as base
-
-# Stage 1: Build dependencies
-FROM base as builder
-
-# Install uv at specific version for reproducibility
-COPY --from=ghcr.io/astral-sh/uv:0.5.18 /uv /usr/local/bin/uv
-
-# Set environment variables for optimal uv performance
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/app/.venv
-
-# Install build dependencies (needed for some Python packages)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Install git and ca-certificates (needed for Go modules and HTTPS)
+RUN apk add --no-cache git ca-certificates
 
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files first for better caching
-COPY pyproject.toml uv.lock ./
+# Copy go mod and sum files
+COPY go.mod go.sum ./
 
-# Install dependencies only (not the project) with cache mount
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+# Download dependencies with cache mount for better performance
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# Copy application code
-COPY . .
+# Copy source code
+COPY src/ ./src/
 
-# Install the project itself
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+# Accept build arguments for version information
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+
+# Build the application with optimizations and version information
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags "-extldflags \"-static\" -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.Date=${DATE}" \
+    -o calendar-api ./src
 
 # Stage 2: Runtime
-FROM base
+FROM alpine:3.18
 
-# Install runtime dependencies (PostgreSQL client and curl for health checks)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Install ca-certificates for HTTPS and postgresql-client for health checks
+RUN apk add --no-cache ca-certificates postgresql-client curl
 
 # Create non-root user
-RUN useradd -m -u 1000 appuser
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
 
 # Set working directory
 WORKDIR /app
 
-# Copy the entire app directory including .venv from builder
-COPY --from=builder --chown=appuser:appuser /app /app
+# Copy the binary from builder stage
+COPY --from=builder /app/calendar-api .
 
-# Set environment variables
-ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+# Change ownership to non-root user
+RUN chown appuser:appuser /app/calendar-api
 
 # Switch to non-root user
 USER appuser
@@ -65,5 +55,9 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
 # Run the application
-CMD ["python", "-m", "src.main"]
+CMD ["./calendar-api"]

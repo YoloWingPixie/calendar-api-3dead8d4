@@ -59,4 +59,8 @@ The project requires a strategy for database object-relational mapping (ORM) and
      - Higher maintenance burden
 
 ## Decision Outcome
-**SQLAlchemy with Alembic** has been selected as the database ORM and migration solution. This decision is driven by the need for type safety, reliable migrations, and good integration with our FastAPI application. SQLAlchemy's mature ORM capabilities and Alembic's migration tools provide a robust solution for managing our database schema and data access. While there is some performance overhead and learning curve, the benefits of type safety, automatic migration generation, and good PostgreSQL support outweigh these considerations. The solution aligns well with our Python-based stack and provides the necessary tools for maintaining data integrity during schema evolution.
+**UPDATE (2025-06):** The project has migrated to **Go with custom migration system**. This decision was driven by performance requirements and the need for a simpler, more maintainable solution. The Go migration system provides versioned migrations with tracking, transaction-based execution, and detailed logging. The original SQLAlchemy/Alembic analysis remains below for historical context.
+
+---
+
+**HISTORICAL:** SQLAlchemy with Alembic was selected as the database ORM and migration solution. This decision was driven by the need for type safety, reliable migrations, and good integration with our FastAPI application. SQLAlchemy's mature ORM capabilities and Alembic's migration tools provided a robust solution for managing our database schema and data access. While there was some performance overhead and learning curve, the benefits of type safety, automatic migration generation, and good PostgreSQL support outweigh these considerations. The solution aligns well with our Python-based stack and provides the necessary tools for maintaining data integrity during schema evolution.

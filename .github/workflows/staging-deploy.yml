@@ -52,20 +52,44 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
+          # Get version information
+          if [ -f "VERSION" ]; then
+            VERSION=$(cat VERSION | tr -cd '0-9.')
+          else
+            VERSION="0.0.0"
+          fi
+          
           HEAD_SHA=${{ github.event.pull_request.head.sha }}
-          RC_TAG="rc-${{ github.run_number }}-${HEAD_SHA:0:7}"
-          SHA_TAG="sha-${HEAD_SHA}"
+          COMMIT=${HEAD_SHA:0:7}
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          # Create semantic version tags
+          VERSION_TAG="v${VERSION}"
+          RC_TAG="v${VERSION}-rc.${{ github.run_number }}"
+          SHA_TAG="v${VERSION}-${COMMIT}"
           IMAGE_NAME="$ECR_REGISTRY/$ECR_REPOSITORY"
 
-          echo "Building container..."
-          docker build -t $IMAGE_NAME:$RC_TAG -t $IMAGE_NAME:$SHA_TAG -f docker/Dockerfile .
+          echo "Building container with version: $VERSION"
+          echo "Tags: $VERSION_TAG, $RC_TAG, $SHA_TAG"
+
+          # Build with version information embedded
+          docker build \
+            --build-arg VERSION="v$VERSION" \
+            --build-arg COMMIT="$COMMIT" \
+            --build-arg DATE="$DATE" \
+            -t $IMAGE_NAME:$VERSION_TAG \
+            -t $IMAGE_NAME:$RC_TAG \
+            -t $IMAGE_NAME:$SHA_TAG \
+            -f docker/Dockerfile .
 
           echo "Pushing images..."
+          docker push $IMAGE_NAME:$VERSION_TAG
           docker push $IMAGE_NAME:$RC_TAG
           docker push $IMAGE_NAME:$SHA_TAG
 
           echo "rc_image_uri=$IMAGE_NAME:$RC_TAG" >> $GITHUB_OUTPUT
           echo "sha_image_uri=$IMAGE_NAME:$SHA_TAG" >> $GITHUB_OUTPUT
+          echo "version_image_uri=$IMAGE_NAME:$VERSION_TAG" >> $GITHUB_OUTPUT
 
       - name: Comment RC tags on PR
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -118,13 +142,12 @@ jobs:
 
           # Basic health check
           if [[ -n "$STAGING_URL" ]]; then
-            curl -f "$STAGING_URL/api/v1/health" || echo "Health check failed"
+            curl -f "$STAGING_URL/health" || echo "Health check failed"
           fi
 
           # Add actual integration test commands here
-          # For example:
-          # npm ci
-          # npm run test:e2e -- --base-url=$STAGING_URL
+          # For Go application, you might want to run:
+          # go test ./tests/integration/... -staging-url=$STAGING_URL
 
   # Comment final status
   comment:

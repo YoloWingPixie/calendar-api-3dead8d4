@@ -1,35 +1,80 @@
 services:
   db:
     image: postgres:16-alpine
+    container_name: calendar-api-postgres
     environment:
-      POSTGRES_USER: calendar_user
-      POSTGRES_PASSWORD: calendar_pass
-      POSTGRES_DB: calendar_db
+      POSTGRES_USER: ${POSTGRES_USER:-calendar_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-calendar_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-calendar_db}
+      # Performance optimizations for local development
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5484}:5432"  # Random port 5484 instead of default 5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d  # For any initialization scripts
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar_user -d calendar_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-calendar_user} -d ${POSTGRES_DB:-calendar_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    
+  # Optional: Test database for running tests
+  db-test:
+    image: postgres:16-alpine
+    container_name: calendar-api-postgres-test
+    environment:
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-test_user}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-test_pass}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-calendar_test_db}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "${TEST_DB_PORT:-5485}:5432"  # Test DB on port 5485
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_POSTGRES_USER:-test_user} -d ${TEST_POSTGRES_DB:-calendar_test_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    profiles: ["test"]  # Only start when explicitly requested
 
   api:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    container_name: calendar-api-server
     environment:
-      DATABASE_URL: postgresql://calendar_user:calendar_pass@db:5432/calendar_db
-      DEBUG: "true"
+      # Database configuration
+      DB_HOST: db
+      DB_PORT: 5432  # Internal container port (always 5432 inside container)
+      DB_USER: ${POSTGRES_USER:-calendar_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-calendar_pass}
+      DB_NAME: ${POSTGRES_DB:-calendar_db}
+      DB_SSLMODE: disable
+      
+      # Application configuration
+      HOST: 0.0.0.0
+      PORT: 8000
+      DEBUG: ${DEBUG:-true}
+      ENVIRONMENT: development
+      
+      # Bootstrap admin key for testing
+      BOOTSTRAP_ADMIN_KEY: ${BOOTSTRAP_ADMIN_KEY:-dev-test-key-123}
+      API_KEY_HEADER: X-API-Key
     ports:
-      - "8000:8000"
-    volumes:
-      - ../src:/app/src
-      - /app/.venv
+      - "${API_PORT:-8012}:8000"  # Configurable API port
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:
+    driver: local
+  postgres_test_data:
+    driver: local
