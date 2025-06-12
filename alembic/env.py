@@ -74,11 +74,29 @@ def get_database_url() -> str:
     )
 
 
+def get_bootstrap_key() -> str | None:
+    """Gets the bootstrap admin key, prioritizing Doppler."""
+    doppler_json_str = os.getenv("DOPPLER_SECRETS_JSON")
+    if doppler_json_str:
+        try:
+            secrets = json.loads(doppler_json_str)
+            if "TF_VAR_bootstrap_admin_key" in secrets:
+                return secrets["TF_VAR_bootstrap_admin_key"]
+        except json.JSONDecodeError:
+            pass  # Fail silently
+    return os.environ.get("BOOTSTRAP_ADMIN_KEY")
+
+
 # Override the sqlalchemy.url with the correct database URL.
 # This is the central point for configuring the database connection for Alembic.
 db_url = get_database_url()
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
+
+# Pass the bootstrap key to the migration script via the config
+bootstrap_key = get_bootstrap_key()
+if bootstrap_key:
+    config.set_main_option("bootstrap_admin_key", bootstrap_key)
 
 
 def run_migrations_offline() -> None:
