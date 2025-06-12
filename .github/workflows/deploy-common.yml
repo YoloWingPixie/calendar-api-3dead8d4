@@ -64,80 +64,11 @@ jobs:
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_ARN || 'arn:aws:iam::655593807337:role/github-actions-calendar-api' }}
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
-  # Run database migrations
-  migrate:
-    name: Run Database Migrations
-    needs: deploy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Run Migration Task
-        run: |
-          CLUSTER="calendar-api-${{ inputs.tf_workspace }}"
-          TASK_DEFINITION="calendar-api-${{ inputs.tf_workspace }}-migration"
-
-          # Get subnet IDs from the VPC (using the public subnets)
-          VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=calendar-api-${{ inputs.tf_workspace }}-vpc" --query "Vpcs[0].VpcId" --output text)
-
-          # Get public subnet IDs
-          SUBNET_IDS=$(aws ec2 describe-subnets \
-            --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Type,Values=public" \
-            --query "Subnets[*].SubnetId" \
-            --output text | tr '\t' ',')
-
-          # Get security group ID
-          SECURITY_GROUP=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=calendar-api-${{ inputs.tf_workspace }}-ecs-tasks-*" --query "SecurityGroups[0].GroupId" --output text)
-
-          echo "Running database migration task (Go app handles migrations on startup)..."
-          TASK_ARN=$(aws ecs run-task \
-            --cluster $CLUSTER \
-            --task-definition $TASK_DEFINITION \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
-            --overrides '{"containerOverrides":[{"name":"calendar-api","command":["./calendar-api"],"environment":[{"name":"RUN_MIGRATIONS_ONLY","value":"true"}]}]}' \
-            --query "tasks[0].taskArn" \
-            --output text)
-
-          echo "Migration task started: $TASK_ARN"
-          echo "Waiting for migration to complete..."
-
-          # Wait for task to complete
-          aws ecs wait tasks-stopped --cluster $CLUSTER --tasks $TASK_ARN
-
-          # Check task exit status
-          EXIT_CODE=$(aws ecs describe-tasks --cluster $CLUSTER --tasks $TASK_ARN --query "tasks[0].containers[0].exitCode" --output text)
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "Migration failed with exit code: $EXIT_CODE"
-            echo "Fetching logs..."
-
-            # Get log stream name
-            TASK_ID=$(echo $TASK_ARN | rev | cut -d'/' -f1 | rev)
-            LOG_STREAM="calendar-api/calendar-api/$TASK_ID"
-
-            # Fetch recent logs
-            aws logs get-log-events \
-              --log-group-name "/ecs/calendar-api-${{ inputs.tf_workspace }}" \
-              --log-stream-name "$LOG_STREAM" \
-              --start-from-head \
-              --limit 100 \
-              --query "events[*].message" \
-              --output text
-
-            exit 1
-          fi
-
-          echo "Migration completed successfully!"
 
   # Common post deployment tasks
   post_deploy:
     name: Post Deployment Tasks
-    needs: [deploy, migrate]
+    needs: [deploy]
     runs-on: ubuntu-latest
     outputs:
       environment_url: ${{ steps.get_url.outputs.url }}

@@ -38,11 +38,6 @@ func main() {
 	// Run migrations with proper tracking and logging
 	migrationManager := NewMigrationManager(db)
 
-	// Print current migration status
-	if err := migrationManager.PrintMigrationStatus(); err != nil {
-		log.Printf("Warning: Failed to print migration status: %v", err)
-	}
-
 	// Run pending migrations
 	if err := migrationManager.RunMigrations(); err != nil {
 		log.Fatal("Failed to run migrations:", err)

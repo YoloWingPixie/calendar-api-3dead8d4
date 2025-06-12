@@ -1,4 +1,4 @@
-module github.com/yourusername/calendar-api
+module github.com/YoloWingPixie/calendar-api
 
 go 1.24
 
