@@ -148,31 +148,19 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update ECS Service
+      - name: Wait for ECS Service Stabilization
         run: |
           CLUSTER="calendar-api-${{ inputs.tf_workspace }}"
 
-          # Only force new deployment if the service exists and is stable
+          # Wait for the service to stabilize after Terraform deployment
           if aws ecs describe-services --cluster $CLUSTER --services calendar-api --query 'services[0].status' --output text | grep -q "ACTIVE"; then
-            echo "Waiting for any existing deployments to complete..."
-            aws ecs wait services-stable \
-              --cluster $CLUSTER \
-              --services calendar-api \
-              --region ${{ env.AWS_REGION }} || true
-
-            echo "Forcing new deployment..."
-            aws ecs update-service \
-              --cluster $CLUSTER \
-              --service calendar-api \
-              --force-new-deployment
-
-            echo "Waiting for service to stabilize..."
+            echo "Waiting for service to stabilize after Terraform deployment..."
             aws ecs wait services-stable \
               --cluster $CLUSTER \
               --services calendar-api \
               --region ${{ env.AWS_REGION }} || echo "Service stabilization timeout"
           else
-            echo "Service not active yet, skipping forced deployment"
+            echo "Service not active yet"
           fi
 
       - name: Get environment URL
