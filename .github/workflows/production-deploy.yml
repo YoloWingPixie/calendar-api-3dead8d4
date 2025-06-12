@@ -69,7 +69,7 @@ jobs:
     name: Deploy To Production
     uses: ./.github/workflows/deploy-common.yml
     with:
-      environment: dev
+      environment: prod
       image_uri: ${{ needs.verify.outputs.image_uri }}
       tf_workspace: prod
       is_ephemeral: false
