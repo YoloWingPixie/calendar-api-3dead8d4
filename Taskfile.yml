@@ -43,7 +43,7 @@ tasks:
     desc: Build the application with embedded version information
     vars:
       VERSION:
-        sh: powershell -Command "if (Test-Path VERSION) { 'v' + (Get-Content VERSION) } else { 'v0.0.0-dev' }" || echo "v0.0.0-dev"
+        sh: powershell -Command "if (Test-Path VERSION) { 'v' + (Get-Content VERSION).Trim() } else { 'v0.0.0-dev' }" || echo "v0.0.0-dev"
       COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
       DATE:
@@ -116,7 +116,7 @@ tasks:
     desc: Build and run the Docker container standalone with version information
     vars:
       VERSION:
-        sh: powershell -Command "if (Test-Path VERSION) { 'v' + (Get-Content VERSION) } else { 'v0.0.0-dev' }" || echo "v0.0.0-dev"
+        sh: powershell -Command "if (Test-Path VERSION) { 'v' + (Get-Content VERSION).Trim() } else { 'v0.0.0-dev' }" || echo "v0.0.0-dev"
       COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
       DATE:
@@ -188,9 +188,9 @@ tasks:
   version:
     desc: Show current version
     cmds:
-      - cmd: cat VERSION
+      - cmd: cat VERSION | tr -d '[:space:]'
         platforms: [darwin, linux]
-      - cmd: powershell -Command "Get-Content VERSION"
+      - cmd: powershell -Command "(Get-Content VERSION).Trim()"
         platforms: [windows]
 
   clean:

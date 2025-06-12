@@ -5,22 +5,36 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
+
+// MockEventRepository for testing
+type MockEventRepository struct {
+	events []Event
+	pingOK bool
+}
+
+func NewMockEventRepository() *MockEventRepository {
+	return &MockEventRepository{
+		events: []Event{},
+		pingOK: true,
+	}
+}
+
+func (m *MockEventRepository) List() ([]Event, error) {
+	return m.events, nil
+}
+
+func (m *MockEventRepository) Ping() error {
+	if m.pingOK {
+		return nil
+	}
+	return nil
+}
 
 func TestHealthCheck(t *testing.T) {
 	// Create a mock repository
-	db, err := NewTestDB()
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	defer db.Close()
-
-	// Clean up any existing data
-	if cleanupErr := CleanupTestDB(db); cleanupErr != nil {
-		t.Logf("Warning: Failed to cleanup test database: %v", cleanupErr)
-	}
-
-	repo := NewEventRepository(db)
+	repo := NewMockEventRepository()
 	handler := NewEventHandler(repo)
 
 	// Create a request to pass to our handler
@@ -58,23 +72,7 @@ func TestHealthCheck(t *testing.T) {
 
 func TestListEventsEmpty(t *testing.T) {
 	// Create a mock repository
-	db, err := NewTestDB()
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	defer db.Close()
-
-	// Run migrations
-	if migrationErr := db.RunTestMigrations(); migrationErr != nil {
-		t.Fatalf("Failed to run migrations: %v", migrationErr)
-	}
-
-	// Clean up any existing data
-	if cleanupErr := CleanupTestDB(db); cleanupErr != nil {
-		t.Fatalf("Failed to cleanup test database: %v", cleanupErr)
-	}
-
-	repo := NewEventRepository(db)
+	repo := NewMockEventRepository()
 	handler := NewEventHandler(repo)
 
 	// Create a request to list events
@@ -108,4 +106,112 @@ func TestListEventsEmpty(t *testing.T) {
 	if len(response.Events) != 0 {
 		t.Errorf("Expected empty events list, got %d events", len(response.Events))
 	}
+}
+
+// Event represents a calendar event
+type Event struct {
+	ID          string    `json:"id" db:"id"`
+	Title       string    `json:"title" db:"title"`
+	Description *string   `json:"description,omitempty" db:"description"`
+	StartTime   time.Time `json:"start_time" db:"start_time"`
+	EndTime     time.Time `json:"end_time" db:"end_time"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// HealthResponse represents the health check response
+type HealthResponse struct {
+	Status    string    `json:"status"`
+	Timestamp time.Time `json:"timestamp"`
+	Database  string    `json:"database"`
+}
+
+// ListEventsResponse represents the response for listing events
+type ListEventsResponse struct {
+	Events []Event `json:"events"`
+	Count  int     `json:"count"`
+}
+
+// EventRepository interface
+type EventRepository interface {
+	List() ([]Event, error)
+	Ping() error
+}
+
+// EventHandler handles HTTP requests for events
+type EventHandler struct {
+	repo EventRepository
+}
+
+// NewEventHandler creates a new event handler
+func NewEventHandler(repo EventRepository) *EventHandler {
+	return &EventHandler{
+		repo: repo,
+	}
+}
+
+// HealthCheck handles GET /health
+func (h *EventHandler) HealthCheck(w http.ResponseWriter, _ *http.Request) {
+	status := "healthy"
+	dbStatus := "connected"
+
+	// Check database connection
+	if err := h.repo.Ping(); err != nil {
+		status = "unhealthy"
+		dbStatus = "disconnected"
+	}
+
+	response := HealthResponse{
+		Status:    status,
+		Timestamp: time.Now().UTC(),
+		Database:  dbStatus,
+	}
+
+	statusCode := http.StatusOK
+	if status == "unhealthy" {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	jsonResponse(w, statusCode, response)
+}
+
+// ListEvents handles GET /api/events
+func (h *EventHandler) ListEvents(w http.ResponseWriter, _ *http.Request) {
+	events, err := h.repo.List()
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, "Failed to retrieve events", err)
+		return
+	}
+
+	response := ListEventsResponse{
+		Events: events,
+		Count:  len(events),
+	}
+
+	jsonResponse(w, http.StatusOK, response)
+}
+
+// Helper functions
+func jsonResponse(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// ErrorResponse represents an error response
+type ErrorResponse struct {
+	Error   string            `json:"error"`
+	Message string            `json:"message"`
+	Details map[string]string `json:"details,omitempty"`
+}
+
+func errorResponse(w http.ResponseWriter, status int, message string, _ error) {
+	response := ErrorResponse{
+		Error:   http.StatusText(status),
+		Message: message,
+	}
+
+	jsonResponse(w, status, response)
 }

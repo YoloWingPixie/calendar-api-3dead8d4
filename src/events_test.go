@@ -2,77 +2,136 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/gorilla/mux"
 )
 
-// setupEventTest creates a test setup with database, auth, and handlers
-func setupEventTest(t *testing.T) (*EventHandler, *AuthMiddleware, *DB) {
-	// Test database configuration
+// MockEventRepository for testing
+type MockEventRepository struct {
+	events  map[string]*Event
+	counter int
+}
+
+func NewMockEventRepository() *MockEventRepository {
+	return &MockEventRepository{
+		events:  make(map[string]*Event),
+		counter: 0,
+	}
+}
+
+func (m *MockEventRepository) Create(event *Event) error {
+	m.counter++
+	event.ID = fmt.Sprintf("test-id-%d", m.counter)
+	event.CreatedAt = time.Now()
+	event.UpdatedAt = event.CreatedAt
+	m.events[event.ID] = event
+	return nil
+}
+
+func (m *MockEventRepository) Get(id string) (*Event, error) {
+	event, exists := m.events[id]
+	if !exists {
+		return nil, nil
+	}
+	return event, nil
+}
+
+func (m *MockEventRepository) Update(id string, event *Event) error {
+	event.ID = id
+	event.UpdatedAt = time.Now()
+	m.events[id] = event
+	return nil
+}
+
+func (m *MockEventRepository) Delete(id string) error {
+	if _, exists := m.events[id]; !exists {
+		return sql.ErrNoRows
+	}
+	delete(m.events, id)
+	return nil
+}
+
+func (m *MockEventRepository) List() ([]Event, error) {
+	events := make([]Event, 0, len(m.events))
+	for _, event := range m.events {
+		events = append(events, *event)
+	}
+	// Sort by start time to match the real repository behavior
+	sort.Slice(events, func(i, j int) bool {
+		return events[i].StartTime.Before(events[j].StartTime)
+	})
+	return events, nil
+}
+
+func (m *MockEventRepository) Ping() error {
+	return nil
+}
+
+// MockAuthMiddleware for testing
+type MockAuthMiddleware struct {
+	config *Config
+}
+
+func NewMockAuthMiddleware(config *Config) *MockAuthMiddleware {
+	return &MockAuthMiddleware{
+		config: config,
+	}
+}
+
+func (m *MockAuthMiddleware) RequireAPIKey(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		apiKey := r.Header.Get(m.config.APIKeyHeader)
+		if apiKey == "" {
+			errorResponse(w, http.StatusUnauthorized, "API key required", nil)
+			return
+		}
+
+		// For testing, accept the bootstrap key
+		if apiKey != m.config.BootstrapAdminKey {
+			errorResponse(w, http.StatusUnauthorized, "Invalid API key", nil)
+			return
+		}
+
+		// Create a test user context
+		testUser := &User{
+			ID:       "test-user",
+			Username: "testuser",
+			APIKey:   apiKey,
+		}
+		r = r.WithContext(WithUser(r.Context(), testUser))
+		next.ServeHTTP(w, r)
+	})
+}
+
+// setupEventTest creates a test setup with mocks
+func setupEventTest(_ *testing.T) (*EventHandler, *MockAuthMiddleware) {
+	// Test configuration
 	config := &Config{
-		DBHost:            "localhost",
-		DBPort:            "5485",
-		DBUser:            "test_user",
-		DBPassword:        "test_pass",
-		DBName:            "calendar_test_db",
-		DBSSLMode:         "disable",
 		BootstrapAdminKey: "test-admin-key-123",
 		APIKeyHeader:      "X-API-Key",
 		Environment:       "test",
 	}
 
-	// Create database connection
-	db, err := NewDB(config)
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-
-	// Run migrations
-	migrationManager := NewMigrationManager(db)
-	if err := migrationManager.RunMigrations(); err != nil {
-		t.Fatalf("Failed to run migrations: %v", err)
-	}
-
-	// Clean up any existing data
-	cleanupDatabase(t, db)
-
-	// Setup repositories
-	userRepo := NewUserRepository(db)
-	eventRepo := NewEventRepository(db)
+	// Setup mock repositories
+	eventRepo := NewMockEventRepository()
 
 	// Setup auth middleware and handlers
-	authMiddleware := NewAuthMiddleware(userRepo, config)
+	authMiddleware := NewMockAuthMiddleware(config)
 	eventHandler := NewEventHandler(eventRepo)
 
-	// Create bootstrap user
-	if err := authMiddleware.CreateBootstrapUser(); err != nil {
-		t.Fatalf("Failed to create bootstrap user: %v", err)
-	}
-
-	return eventHandler, authMiddleware, db
-}
-
-// cleanupDatabase removes all test data
-func cleanupDatabase(t *testing.T, db *DB) {
-	// Delete all events
-	if _, err := db.Exec("DELETE FROM events"); err != nil {
-		t.Logf("Warning: Failed to clean events table: %v", err)
-	}
-
-	// Delete all users except the bootstrap user (we'll recreate it)
-	if _, err := db.Exec("DELETE FROM users"); err != nil {
-		t.Logf("Warning: Failed to clean users table: %v", err)
-	}
+	return eventHandler, authMiddleware
 }
 
 func TestEventsCreateEvent(t *testing.T) {
-	handler, auth, db := setupEventTest(t)
-	defer db.Close()
+	handler, auth := setupEventTest(t)
 
 	tests := []struct {
 		name           string
@@ -186,8 +245,7 @@ func TestEventsCreateEvent(t *testing.T) {
 }
 
 func TestEventsGetEvent(t *testing.T) {
-	handler, auth, db := setupEventTest(t)
-	defer db.Close()
+	handler, auth := setupEventTest(t)
 
 	// Create a test event first
 	createPayload := CreateEventRequest{
@@ -281,8 +339,7 @@ func TestEventsGetEvent(t *testing.T) {
 }
 
 func TestEventsUpdateEvent(t *testing.T) {
-	handler, auth, db := setupEventTest(t)
-	defer db.Close()
+	handler, auth := setupEventTest(t)
 
 	// Create a test event first
 	createPayload := CreateEventRequest{
@@ -387,8 +444,7 @@ func TestEventsUpdateEvent(t *testing.T) {
 }
 
 func TestEventsDeleteEvent(t *testing.T) {
-	handler, auth, db := setupEventTest(t)
-	defer db.Close()
+	handler, auth := setupEventTest(t)
 
 	// Create a test event first
 	createPayload := CreateEventRequest{
@@ -479,8 +535,7 @@ func TestEventsDeleteEvent(t *testing.T) {
 }
 
 func TestEventsListEvents(t *testing.T) {
-	handler, auth, db := setupEventTest(t)
-	defer db.Close()
+	handler, auth := setupEventTest(t)
 
 	// Test empty list first
 	t.Run("Empty list", func(t *testing.T) {

@@ -12,12 +12,12 @@ import (
 
 // EventHandler handles HTTP requests for events
 type EventHandler struct {
-	repo      *EventRepository
+	repo      EventRepositoryInterface
 	validator *validator.Validate
 }
 
 // NewEventHandler creates a new event handler
-func NewEventHandler(repo *EventRepository) *EventHandler {
+func NewEventHandler(repo EventRepositoryInterface) *EventHandler {
 	return &EventHandler{
 		repo:      repo,
 		validator: validator.New(),

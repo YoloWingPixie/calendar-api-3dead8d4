@@ -42,7 +42,7 @@ jobs:
         run: |
           # Get current version from VERSION file on PR branch
           if [ -f "VERSION" ]; then
-            PR_VERSION="v$(cat VERSION)"
+            PR_VERSION="v$(cat VERSION | tr -d '[:space:]')"
           else
             PR_VERSION="v0.0.0"
           fi
@@ -51,7 +51,7 @@ jobs:
           git fetch origin ${{ github.event.pull_request.base.ref }}
           git checkout -b temp-base origin/${{ github.event.pull_request.base.ref }}
           if [ -f "VERSION" ]; then
-            BASE_VERSION="v$(cat VERSION)"
+            BASE_VERSION="v$(cat VERSION | tr -d '[:space:]')"
           else
             BASE_VERSION="v0.0.0"
           fi
@@ -118,7 +118,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.23", "1.24"]
+        go-version: ["1.24"]
 
     steps:
       - uses: actions/checkout@v4
@@ -167,7 +167,7 @@ jobs:
         run: |
           # Get version information
           if [ -f "VERSION" ]; then
-            VERSION="v$(cat VERSION)"
+            VERSION="v$(cat VERSION | tr -d '[:space:]')"
           else
             VERSION="v0.0.0-dev"
           fi
@@ -206,7 +206,7 @@ jobs:
         run: |
           # Get version information
           if [ -f "VERSION" ]; then
-            VERSION="v$(cat VERSION)"
+            VERSION="v$(cat VERSION | tr -d '[:space:]')"
           else
             VERSION="v0.0.0-dev"
           fi

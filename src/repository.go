@@ -8,6 +8,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// EventRepositoryInterface defines the interface for event repository
+type EventRepositoryInterface interface {
+	Create(event *Event) error
+	Get(id string) (*Event, error)
+	Update(id string, event *Event) error
+	Delete(id string) error
+	List() ([]Event, error)
+	Ping() error
+}
+
 // EventRepository handles database operations for events
 type EventRepository struct {
 	db *DB
