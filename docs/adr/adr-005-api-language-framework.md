@@ -63,4 +63,9 @@ The project requires a language and framework for implementing the calendar API.
      - Less suitable for backend services
 
 ## Decision Outcome
-**Python with FastAPI** has been selected as the API language and framework. While Go would provide better runtime performance and resource utilization, Python's development speed and rich ecosystem (Pydantic, SQLAlchemy, Alembic, uv) make it the better choice given the time constraints. The performance difference is acceptable for the current scale (1.2 RPS peak), and the development velocity benefits outweigh the runtime performance considerations. FastAPI was chosen over Flask for its modern async support, built-in OpenAPI documentation, and better type safety through Pydantic.
+**UPDATE (2025-06):** The project has migrated to **Go** as the API language and framework. This decision was driven by the need for improved runtime performance, lower memory usage, and a simpler, more maintainable codebase. Go's static typing, strong concurrency support, and excellent containerization capabilities align well with our infrastructure and performance requirements. 
+
+---
+
+**HISTORICAL:**
+Python with FastAPI was originally selected as the API language and framework. While Go would provide better runtime performance and resource utilization, Python's development speed and rich ecosystem (Pydantic, SQLAlchemy, Alembic, uv) made it the better choice given the time constraints. The performance difference was acceptable for the initial scale (1.2 RPS peak), and the development velocity benefits outweighed the runtime performance considerations. FastAPI was chosen over Flask for its modern async support, built-in OpenAPI documentation, and better type safety through Pydantic.

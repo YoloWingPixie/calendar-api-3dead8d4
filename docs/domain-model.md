@@ -2,7 +2,7 @@
 
 ## Entities
 
-### Calendar
+### Calendar (Not implemented)
 **Description:** Represents a collection of `CalendarEvents`.
 **Attributes:**
     - CalendarId: Unique identifier for the calendar. (PK)
@@ -45,7 +45,7 @@
     - Update event details
     - Delete event
 
-### User
+### User (Partially Implemented)
 **Description:** Represents an individual who uses the calendar API. Users can own calendars, and CRUD events.
 **Attributes:**
     - UserId: Unique identifier for the user (PK)

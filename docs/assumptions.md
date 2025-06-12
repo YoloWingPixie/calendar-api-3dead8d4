@@ -2,7 +2,7 @@
 This document shall contain a registered list of assumptions regarding this project. These assumptions are created based on un-established information in the initial confidential requirements document (ICRD).
 
 **A-001:** There is no specific data security regulartory framework that needs to be applied to this project.
-**A-002:** The title and description could contain Personally Identifiable Information (PII) or proprietary information that may not necessarily be classified for all users to view.
+**A-002:** The title and description could contain Personally Identifiable Information (PII) or proprietary information that may not necessarily be classified for all users to view, however it is not in-scope to protect the columns at rest.
 **A-003:** Given the time constraints of this project we cannot properly implement Zero Trust Network Access (ZTNA) or integrate an Identity Aware Proxy (IAP) nor provide plugin support for Identity and Access Management (IAM) platforms or Identity Providers (IdP).
 **A-004:** A thorough review for the consumers of this proposed API has already been completed and the ICRD as presented contains 100% of all expected functionality for the API
 **A-005:** Each instance of the API shall be single tenant. This is not a SaaS product designed for multi-tenancy.
