@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from src.models import Calendar, CalendarEvent, User  # noqa: F401
+from src.models import CalendarEvent, User  # noqa: F401
 from src.models.base import Base
 
 # this is the Alembic Config object, which provides
