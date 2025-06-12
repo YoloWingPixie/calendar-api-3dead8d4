@@ -9,59 +9,77 @@ tasks:
       - task --list
     silent: true
 
-  install-uv:
-    desc: Install uv package manager
+  install-go:
+    desc: Install Go if not present
     cmds:
-      - cmd: curl -LsSf https://astral.sh/uv/install.sh | sh
-        platforms: [darwin, linux]
-      - cmd: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-        platforms: [windows]
+      - cmd: go version
+        platforms: [darwin, linux, windows]
     status:
-      - command -v uv
+      - command -v go
 
-  sync:
-    desc: Install all project dependencies (including dev)
-    deps: [install-uv]
+  mod:
+    desc: Download and verify dependencies
+    deps: [install-go]
     cmds:
-      - uv sync --all-groups
+      - go mod download
+      - go mod verify
+
+  tidy:
+    desc: Add missing and remove unused modules
+    deps: [install-go]
+    cmds:
+      - go mod tidy
 
   setup:
     desc: Set up the development environment
-    deps: [sync, pre-commit:install]
-    cmds:
-      - echo "Development environment ready!"
+    deps: [mod, tidy]
 
-  pre-commit:install:
-    desc: Install pre-commit hooks
+  build:
+    desc: Build the application with version information
     cmds:
-      - uv run pre-commit install
-    status:
-      - test -f .git/hooks/pre-commit
+      - task: build:versioned
 
-  pre-commit:run:
-    desc: Run pre-commit on all files
+  build:versioned:
+    desc: Build the application with embedded version information
+    vars:
+      VERSION:
+        sh: powershell -Command "if (Test-Path VERSION) { 'v' + (Get-Content VERSION) } else { 'v0.0.0-dev' }" || echo "v0.0.0-dev"
+      COMMIT:
+        sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+      DATE:
+        sh: powershell -Command "(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')" || echo "unknown"
     cmds:
-      - uv run pre-commit run --all-files
+      - cd src && go build -ldflags "-X main.Version={{.VERSION}} -X main.Commit={{.COMMIT}} -X main.Date={{.DATE}}" -o ../bin/calendar-api .
+
+  build:simple:
+    desc: Build the application without version information
+    cmds:
+      - cd src && go build -o ../bin/calendar-api .
 
   format:
-    desc: Format code with ruff
+    desc: Format code with gofmt
     cmds:
-      - uv run ruff format .
+      - go fmt ./...
 
   lint:
-    desc: Lint code with ruff
+    desc: Lint code with golangci-lint
     cmds:
-      - uv run ruff check . --fix
+      - golangci-lint run ./...
 
-  typecheck:
-    desc: Type check with mypy
+  vet:
+    desc: Examine Go source code and report suspicious constructs
     cmds:
-      - uv run mypy src/
+      - go vet ./...
 
   test:
-    desc: Run tests with pytest
+    desc: Run tests with coverage
     cmds:
-      - doppler run -- uv run pytest tests/ -v --cov=src --cov-report=term-missing
+      - doppler run -- go test ./... -v -cover -coverprofile=coverage.out
+
+  test:local:
+    desc: Run tests locally without doppler
+    cmds:
+      - go test ./... -v -cover
 
   dev:
     desc: Run development server in Docker
@@ -71,7 +89,13 @@ tasks:
   dev:local:
     desc: Run development server locally
     cmds:
-      - doppler run -- uv run python -m src.main
+      - cd src && doppler run -- go run .
+
+  run:
+    desc: Run the application locally
+    deps: [build]
+    cmds:
+      - doppler run -- ./bin/calendar-api
 
   docker:build:
     desc: Build Docker images
@@ -89,36 +113,92 @@ tasks:
       - docker-compose -f docker/docker-compose.yml logs -f
 
   docker:run:
-    desc: Build and run the Docker container standalone
+    desc: Build and run the Docker container standalone with version information
+    vars:
+      VERSION:
+        sh: powershell -Command "if (Test-Path VERSION) { 'v' + (Get-Content VERSION) } else { 'v0.0.0-dev' }" || echo "v0.0.0-dev"
+      COMMIT:
+        sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+      DATE:
+        sh: powershell -Command "(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')" || echo "unknown"
     cmds:
-      - docker build -t calendar-api:local -f docker/Dockerfile .
+      - docker build -t calendar-api:local -f docker/Dockerfile --build-arg VERSION={{.VERSION}} --build-arg COMMIT={{.COMMIT}} --build-arg DATE={{.DATE}} .
       - doppler run -- docker run --rm -it -p 8000:8000 --name calendar-api-local calendar-api:local
 
+  # Database management tasks
+  db:start:
+    desc: Start local PostgreSQL database
+    cmds:
+      - docker-compose -f docker/docker-compose.yml up -d db
+
+  db:start:test:
+    desc: Start local PostgreSQL database with test database
+    cmds:
+      - docker-compose -f docker/docker-compose.yml --profile test up -d db db-test
+
+  db:stop:
+    desc: Stop local PostgreSQL database
+    cmds:
+      - docker-compose -f docker/docker-compose.yml down
+
+  db:logs:
+    desc: Show database logs
+    cmds:
+      - docker-compose -f docker/docker-compose.yml logs -f db
+
+  db:connect:
+    desc: Connect to local database with psql
+    cmds:
+      - docker exec -it calendar-api-postgres psql -U calendar_user -d calendar_db
+
+  db:connect:test:
+    desc: Connect to test database with psql
+    cmds:
+      - docker exec -it calendar-api-postgres-test psql -U test_user -d calendar_test_db
+
+  db:reset:
+    desc: Reset local database (remove volumes and restart)
+    cmds:
+      - docker-compose -f docker/docker-compose.yml down -v
+      - docker-compose -f docker/docker-compose.yml up -d db
+
   db:migrate:
-    desc: Run database migrations
+    desc: Run database migrations with detailed logging
     cmds:
-      - doppler run -- uv run alembic upgrade head
+      - cd src && doppler run -- RUN_MIGRATIONS_ONLY=true go run .
 
-  db:revision:
-    desc: Create a new database migration
+  db:migrate:local:
+    desc: Run database migrations against local database
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5484
+      DB_USER: calendar_user
+      DB_PASSWORD: calendar_pass
+      DB_NAME: calendar_db
+      DB_SSLMODE: disable
     cmds:
-      - doppler run -- uv run alembic revision --autogenerate -m "{{.CLI_ARGS}}"
+      - cd src && RUN_MIGRATIONS_ONLY=true go run .
 
-  db:downgrade:
-    desc: Downgrade database by one revision
+  db:status:
+    desc: Show migration status
     cmds:
-      - doppler run -- uv run alembic downgrade -1
+      - cd src && doppler run -- go run .
 
-  db:history:
-    desc: Show migration history
+  # Version management tasks
+  version:
+    desc: Show current version
     cmds:
-      - doppler run -- uv run alembic history
+      - cmd: cat VERSION
+        platforms: [darwin, linux]
+      - cmd: powershell -Command "Get-Content VERSION"
+        platforms: [windows]
 
-  db:current:
-    desc: Show current database revision
+  clean:
+    desc: Clean build artifacts
     cmds:
-      - doppler run -- uv run alembic current
+      - rm -rf bin/
+      - rm -f coverage.out
 
   ci:
     desc: Run CI tasks
-    deps: [lint, typecheck, test, format, pre-commit:run]
+    deps: [format, vet, lint, test]

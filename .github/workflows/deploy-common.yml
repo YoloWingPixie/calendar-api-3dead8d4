@@ -93,12 +93,13 @@ jobs:
           # Get security group ID
           SECURITY_GROUP=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=calendar-api-${{ inputs.tf_workspace }}-ecs-tasks-*" --query "SecurityGroups[0].GroupId" --output text)
 
-          echo "Running database migration task..."
+          echo "Running database migration task (Go app handles migrations on startup)..."
           TASK_ARN=$(aws ecs run-task \
             --cluster $CLUSTER \
             --task-definition $TASK_DEFINITION \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --overrides '{"containerOverrides":[{"name":"calendar-api","command":["./calendar-api"],"environment":[{"name":"RUN_MIGRATIONS_ONLY","value":"true"}]}]}' \
             --query "tasks[0].taskArn" \
             --output text)
 
@@ -117,7 +118,7 @@ jobs:
 
             # Get log stream name
             TASK_ID=$(echo $TASK_ARN | rev | cut -d'/' -f1 | rev)
-            LOG_STREAM="migration/migration/$TASK_ID"
+            LOG_STREAM="calendar-api/calendar-api/$TASK_ID"
 
             # Fetch recent logs
             aws logs get-log-events \

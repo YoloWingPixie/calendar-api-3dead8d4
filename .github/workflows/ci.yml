@@ -28,13 +28,10 @@ jobs:
         with:
           fetch-depth: 0  # Need full history
 
-      - name: Set up Python
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: '3.13'
-
-      - name: Install packaging
-        run: pip install packaging
+          go-version: '1.24'
 
       - name: Checkout base branch
         run: |
@@ -43,23 +40,41 @@ jobs:
       - name: Validate semver and version bump
         id: validate
         run: |
-          # Get current version from PR branch
-          PR_VERSION=$(grep -E '^version = ".*"$' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-
-          # Get base branch version
-          BASE_VERSION=$(git show origin/${{ github.event.pull_request.base.ref }}:pyproject.toml | grep -E '^version = ".*"$' | sed 's/version = "\(.*\)"/\1/')
-
-          # Export for Python script
-          export PR_VERSION
-          export BASE_VERSION
-
-          # Run version check script
-          if python .github/scripts/check_version_bump.py; then
-            echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
-            echo "pr_version=$PR_VERSION" >> $GITHUB_OUTPUT
+          # Get current version from VERSION file on PR branch
+          if [ -f "VERSION" ]; then
+            PR_VERSION="v$(cat VERSION)"
           else
+            PR_VERSION="v0.0.0"
+          fi
+          
+          # Get base branch version from its VERSION file
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git checkout -b temp-base origin/${{ github.event.pull_request.base.ref }}
+          if [ -f "VERSION" ]; then
+            BASE_VERSION="v$(cat VERSION)"
+          else
+            BASE_VERSION="v0.0.0"
+          fi
+          git checkout ${{ github.event.pull_request.head.ref }}
+          
+          echo "VERSION file on PR branch: $PR_VERSION"
+          echo "VERSION file on base branch: $BASE_VERSION"
+          
+          # Validate semantic versioning format
+          if ! echo "$PR_VERSION" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$'; then
+            echo "❌ Invalid semantic version format in VERSION file: $PR_VERSION"
             exit 1
           fi
+          
+          # Check that version was bumped (if not the same)
+          if [ "$PR_VERSION" = "$BASE_VERSION" ]; then
+            echo "⚠️ Version not bumped - VERSION file unchanged"
+          else
+            echo "✅ Version bumped from $BASE_VERSION to $PR_VERSION"
+          fi
+          
+          echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "pr_version=$PR_VERSION" >> $GITHUB_OUTPUT
 
       - name: Comment version bump on PR
         if: success()
@@ -98,49 +113,108 @@ jobs:
             });
 
   test:
-    name: Test Python ${{ matrix.python-version }}
+    name: Test Go ${{ matrix.go-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.13"]
+        go-version: ["1.23", "1.24"]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
         with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          go-version: ${{ matrix.go-version }}
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - name: Cache Go modules
+        uses: actions/cache@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.go-version }}-
 
-      - name: Install dependencies
+      - name: Download dependencies
         run: |
-          uv sync --frozen
-
-      - name: Run linter
-        run: |
-          uv run ruff check .
+          go mod download
+          go mod verify
 
       - name: Run formatter check
         run: |
-          uv run ruff format --check .
+          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+            echo "Code is not formatted. Run 'gofmt -s -w .'"
+            gofmt -s -l .
+            exit 1
+          fi
 
-      - name: Run type checking
+      - name: Run vet
         run: |
-          uv run mypy src/
+          go vet ./...
+
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+      - name: Run linter
+        run: |
+          $(go env GOPATH)/bin/golangci-lint run ./...
+
+      - name: Build application
+        run: |
+          # Get version information
+          if [ -f "VERSION" ]; then
+            VERSION="v$(cat VERSION)"
+          else
+            VERSION="v0.0.0-dev"
+          fi
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          echo "Building version: $VERSION"
+          
+          # Build with version information embedded
+          cd src && go build -ldflags "-X main.Version=$VERSION -X main.Commit=$COMMIT -X main.Date=$DATE" -o ../bin/calendar-api .
 
       - name: Run tests
         env:
-          DATABASE_URL: "postgresql://test:test@localhost/test"
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: test
+          DB_PASSWORD: test
+          DB_NAME: test
+          DB_SSLMODE: disable
+          TEST_DB_HOST: localhost
+          TEST_DB_PORT: 5432
+          TEST_DB_USER: test
+          TEST_DB_PASSWORD: test
+          TEST_DB_NAME: calendar_test
+          TEST_DB_SSLMODE: disable
         run: |
-          uv run pytest tests/ -v --cov=src --cov-report=term-missing
+          go test ./... -v -cover -coverprofile=coverage.out
 
-      - name: Verify package installation
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+
+      - name: Verify package compilation
         run: |
-          uv run python -c "import src; print('Package imports successfully')"
+          # Get version information
+          if [ -f "VERSION" ]; then
+            VERSION="v$(cat VERSION)"
+          else
+            VERSION="v0.0.0-dev"
+          fi
+          COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          echo "Verifying build for version: $VERSION"
+          
+          # Build with version information embedded
+          cd src && go build -ldflags "-X main.Version=$VERSION -X main.Commit=$COMMIT -X main.Date=$DATE" -o /tmp/calendar-api .
+          echo "Application builds successfully"

@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Complete Go migration system with version tracking and detailed logging
+- Doppler secrets integration via DOPPLER_SECRETS_JSON parsing
+- API key authentication middleware with bootstrap admin key support
+- User management system with database storage
+
+### Changed
+- Migrated from Python FastAPI to Go with Gorilla Mux
+- Replaced Alembic with custom Go migration system
+- Updated all GitHub workflows for Go development
+- Simplified deployment: migrations now run automatically on application startup
+- Removed separate ECS migration task definition (no longer needed)
+
+### Removed
+- Alembic migration system and configuration files
+- Python-specific dependencies and configuration
+- RUN_MIGRATIONS_ONLY environment variable and migration-only mode
+- Separate ECS migration task definition in Terraform
+
+### Added
 - SQLAlchemy ORM models for User, Calendar, and CalendarEvent entities
 - Pydantic schemas for all API request/response validation
 - Database connection and session management setup

@@ -71,11 +71,7 @@ calendar-api/
 │       ├── __init__.py
 │       └── test_models.py         # ORM model tests
 │
-├── alembic/                       # Database migrations
-│   ├── versions/                  # Migration files (YYYY-MM-DD_descriptive_name.py)
-│   ├── alembic.ini               # Alembic configuration
-│   ├── env.py                    # Migration environment setup
-│   └── script.py.mako            # Migration template
+├── src/migrations.go             # Go migration system (versioned migrations with tracking)
 │
 ├── terraform/                     # Infrastructure as Code (OpenTofu)
 │   ├── environments/              # Environment-specific configs
@@ -187,11 +183,12 @@ The test structure mirrors the source code for easy navigation:
 - **Model Tests**: Test database constraints and relationships
 - **Integration Tests**: Test full request-response cycles
 
-### Database Migrations (`alembic/`)
+### Database Migrations (`src/migrations.go`)
 
-- **Naming Convention**: `YYYY-MM-DD_descriptive_slug.py`
-- **Version Control**: All schema changes tracked via migrations
-- **Async Support**: Configured for async SQLAlchemy
+- **Version Control**: All schema changes tracked via Go migration system
+- **Migration Tracking**: Uses `schema_migrations` table for version tracking
+- **Execution**: Automatic migration execution on application startup
+- **Migration-Only Mode**: Set `RUN_MIGRATIONS_ONLY=true` for deployment migrations
 
 ### Infrastructure as Code (`terraform/`)
 
@@ -250,9 +247,9 @@ GitHub Actions workflows implementing trunk-based development:
    - Write tests in corresponding `tests/` directories
 
 2. **Database Changes**:
-   - Modify models in `models/`
-   - Generate migration: `task db:revision -- "description"`
-   - Review and run migration: `task db:migrate`
+   - Add new migration to `src/migrations.go`
+   - Increment version number and add SQL
+   - Run migration: `task db:migrate`
 
 3. **Infrastructure Changes**:
    - Update terraform modules or environment configs
