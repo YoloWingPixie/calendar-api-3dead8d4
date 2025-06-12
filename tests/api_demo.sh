@@ -1,140 +1,217 @@
 #!/bin/bash
 
+# -----------------------------------------------------------------------------
+# Bash Calendar-API demo script
+# -----------------------------------------------------------------------------
+#  ‑ Exercises the public and authenticated endpoints of the Calendar API
+#  ‑ Shows nicely formatted coloured output (similar to api_demo.ps1)
+# -----------------------------------------------------------------------------
+
+set -euo pipefail
+
+# -----------------------------------------------------------------------------
 # Configuration
-DOCKER_COMPOSE_PATH="$(dirname "$0")/../docker/docker-compose.yml"
-API_PORT=$(grep -oP 'API_PORT:-\K\d+' "$DOCKER_COMPOSE_PATH" | head -n 1)
-API_KEY=$(grep -oP 'BOOTSTRAP_ADMIN_KEY:-\K[^\s]+' "$DOCKER_COMPOSE_PATH" | head -n 1)
+# -----------------------------------------------------------------------------
+API_PORT=8012
+API_KEY=${BOOTSTRAP_ADMIN_KEY:-""}
 API_URL="http://localhost:${API_PORT}"
 
-echo "Using API URL: $API_URL"
-echo "Using API Key: $API_KEY"
-echo
-
-# Colors for output
+# -----------------------------------------------------------------------------
+# Colour definitions
+# -----------------------------------------------------------------------------
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m' # No colour
 
-# Helper function to print section headers
-print_header() {
-    echo -e "\n${CYAN}=== $1 ===${NC}"
+# -----------------------------------------------------------------------------
+# Helper functions
+# -----------------------------------------------------------------------------
+function print_header() {
+  echo -e "${YELLOW}\n$*...${NC}"
 }
 
-# Helper function to display event details
-print_event_details() {
-    local event=$1
-    echo -e "\n${CYAN}Event Details:${NC}"
-    echo "  Title: $(echo "$event" | jq -r '.title')"
-    echo "  Description: $(echo "$event" | jq -r '.description')"
-    echo "  Start Time: $(date -d "$(echo "$event" | jq -r '.start_time')" '+%Y-%m-%d %H:%M')"
-    echo "  End Time: $(date -d "$(echo "$event" | jq -r '.end_time')" '+%Y-%m-%d %H:%M')"
-    echo "  ID: $(echo "$event" | jq -r '.id')"
-    echo "  Created At: $(date -d "$(echo "$event" | jq -r '.created_at')" '+%Y-%m-%d %H:%M:%S')"
-    echo "  Updated At: $(date -d "$(echo "$event" | jq -r '.updated_at')" '+%Y-%m-%d %H:%M:%S')"
-    echo
+function success() {
+  echo -e "${GREEN}SUCCESS: $*${NC}"
 }
 
-# Helper function to make API calls
-make_request() {
-    local method=$1
-    local endpoint=$2
-    local data=$3
-    local api_key=${4:-$API_KEY}
+function error() {
+  echo -e "${RED}ERROR: $*${NC}"
+}
 
-    echo -e "${YELLOW}Request: $method $endpoint${NC}"
-    if [ ! -z "$data" ]; then
-        echo -e "${YELLOW}Data: $data${NC}"
-    fi
+function event_details() {
+  local json="$1"
+  echo -e "${CYAN}\nEvent Details:${NC}"
+  echo -e "  Title:        $(echo "$json" | jq -r '.title')"
+  echo -e "  Description:  $(echo "$json" | jq -r '.description')"
+  echo -e "  Start Time:   $(echo "$json" | jq -r '.start_time')"
+  echo -e "  End Time:     $(echo "$json" | jq -r '.end_time')"
+  echo -e "  ID:           $(echo "$json" | jq -r '.id')"
+  echo -e "  Created At:   $(echo "$json" | jq -r '.created_at')"
+  echo -e "  Updated At:   $(echo "$json" | jq -r '.updated_at')\n"
+}
 
-    # Make the request and capture both status code and response
-    if [ -z "$data" ]; then
-        response=$(curl -s -w "\n%{http_code}" \
-            -H "X-API-Key: $api_key" \
-            "$API_URL$endpoint")
+# Displays the HTTP request being made
+function show_request() {
+  local method="$1"; shift
+  local url="$1"; shift
+  local body="${1:-}"
+  echo -e "${CYAN}--> ${method} ${url}${NC}"
+  if [[ -n "$body" ]]; then
+    # pretty-print JSON body if possible
+    if command -v jq >/dev/null 2>&1; then
+      echo "$body" | jq -C .
     else
-        response=$(curl -s -w "\n%{http_code}" \
-            -H "Content-Type: application/json" \
-            -H "X-API-Key: $api_key" \
-            -d "$data" \
-            "$API_URL$endpoint")
+      echo -e "$body"
     fi
-
-    # Split response into body and status code
-    status_code=$(echo "$response" | tail -n1)
-    body=$(echo "$response" | sed '$d')
-
-    # Print response
-    if [ "$status_code" -ge 200 ] && [ "$status_code" -lt 300 ]; then
-        echo -e "${GREEN}Response (Status: $status_code)${NC}"
-        if command -v jq >/dev/null 2>&1; then
-            echo "$body" | jq '.'
-        else
-            echo "$body"
-        fi
-    else
-        echo -e "${RED}Response (Status: $status_code)${NC}"
-        echo "$body"
-    fi
-    echo
+  fi
 }
 
-# Test health endpoint
-print_header "Testing Health Endpoint"
-make_request "GET" "/health"
+# Pretty-print an events array as table
+function display_events() {
+  local json="$1"
+  local events_present=$(echo "$json" | jq -r '.events | length')
+  if [[ "$events_present" -eq 0 ]]; then
+    echo -e "${YELLOW}(no events)${NC}"
+    return
+  fi
 
-# Test version endpoint
-print_header "Testing Version Endpoint"
-make_request "GET" "/version"
+  printf "\n${CYAN}%-16s %-16s %-36s %-20s %-30s${NC}\n" "Start Time" "End Time" "ID" "Title" "Description"
+  printf "${CYAN}%-16s %-16s %-36s %-20s %-30s${NC}\n" "----------" "--------" "--" "-----" "-----------"
 
-# Test authentication (list events)
-print_header "Testing Authentication"
-make_request "GET" "/api/events"
+  echo "$json" | jq -c '.events[]' | while read -r evt; do
+    start=$(echo "$evt" | jq -r '.start_time' | cut -c1-16)
+    end=$(echo "$evt" | jq -r '.end_time' | cut -c1-16)
+    id=$(echo "$evt" | jq -r '.id')
+    title=$(echo "$evt" | jq -r '.title')
+    desc=$(echo "$evt" | jq -r '.description')
+    printf "${GREEN}%-16s %-16s %-36s %-20s %-30s${NC}\n" "$start" "$end" "$id" "$title" "$desc"
+  done
+  echo
+}
 
-# Create test event
-print_header "Creating Test Event"
-event_data='{
-    "title": "Bash Test Event",
-    "description": "Event created via Bash API test",
-    "start_time": "'$(date -u -d "+1 hour" "+%Y-%m-%dT%H:%M:%SZ")'",
-    "end_time": "'$(date -u -d "+2 hours" "+%Y-%m-%dT%H:%M:%SZ")'"
-}'
-response=$(make_request "POST" "/api/events" "$event_data")
+# -----------------------------------------------------------------------------
+# Start tests
+# -----------------------------------------------------------------------------
+
+print_header "Testing API at ${API_URL}"
+
+# 1. Health check (public)
+print_header "Testing health endpoint"
+show_request "GET" "${API_URL}/health"
+response=$(curl -s "${API_URL}/health")
+status=$(echo "$response" | jq -r '.status // empty')
+if [[ -n "$status" ]]; then
+  success "Health: $status"
+else
+  error "Health check failed: $response"
+  exit 1
+fi
+
+# 2. Version check (public)
+print_header "Testing version endpoint"
+show_request "GET" "${API_URL}/version"
+response=$(curl -s "${API_URL}/version")
+version=$(echo "$response" | jq -r '.version // empty')
+if [[ -n "$version" ]]; then
+  success "Version: $version"
+else
+  error "Version check failed: $response"
+fi
+
+# 3. List events (authentication test)
+print_header "Testing authentication (listing events)"
+show_request "GET" "${API_URL}/api/events"
+response=$(curl -s -H "X-API-Key: $API_KEY" "${API_URL}/api/events") || {
+  error "Authentication failed"
+  exit 1
+}
+count=$(echo "$response" | jq -r '.events | length')
+success "Authentication successful. Found ${count} events"
+
+# Show table of returned events
+display_events "$response"
+
+# 4. Create a test event
+print_header "Creating test event"
+start_time=$(date -u -v+1H +"%Y-%m-%dT%H:%M:%SZ")
+end_time=$(date -u -v+2H +"%Y-%m-%dT%H:%M:%SZ")
+
+event_data=$(cat <<EOF
+{
+  "title": "Bash Test Event",
+  "description": "Event created via Bash API test",
+  "start_time": "${start_time}",
+  "end_time": "${end_time}"
+}
+EOF
+)
+
+# Show the request after body is prepared
+show_request "POST" "${API_URL}/api/events" "$event_data"
+
+response=$(curl -s -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -d "${event_data}" "${API_URL}/api/events") || {
+  error "Event creation failed"
+  exit 1
+}
+
+success "Event created with ID: $(echo "$response" | jq -r '.id')"
+event_details "$response"
 event_id=$(echo "$response" | jq -r '.id')
 
-# Get created event
-print_header "Retrieving Created Event"
-response=$(make_request "GET" "/api/events/$event_id")
-print_event_details "$response"
+# 5. Retrieve the created event
+print_header "Retrieving created event"
+show_request "GET" "${API_URL}/api/events/${event_id}"
+response=$(curl -s -H "X-API-Key: $API_KEY" "${API_URL}/api/events/${event_id}") || {
+  error "Event retrieval failed"
+  exit 1
+}
 
-# Update event
-print_header "Updating Event"
-update_data='{
-    "title": "Updated Bash Test Event",
-    "description": "This event was updated via Bash",
-    "start_time": "'$(echo "$response" | jq -r '.start_time')'",
-    "end_time": "'$(echo "$response" | jq -r '.end_time')'"
-}'
-response=$(make_request "PUT" "/api/events/$event_id" "$update_data")
-print_event_details "$response"
+success "Retrieved event: $(echo "$response" | jq -r '.title')"
+event_details "$response"
 
-# List all events
-print_header "Listing All Events"
-response=$(make_request "GET" "/api/events")
-echo -e "${GREEN}Total events: $(echo "$response" | jq '.events | length')${NC}"
+# 6. Update the event
+print_header "Updating event"
+update_data=$(cat <<EOF
+{
+  "title": "Updated Bash Test Event",
+  "description": "This event was updated via Bash",
+  "start_time": "${start_time}",
+  "end_time": "${end_time}"
+}
+EOF
+)
 
-# Create table header
-echo -e "\n${CYAN}Title\tStart Time\tEnd Time\tID${NC}"
-echo -e "${CYAN}-----\t----------\t--------\t--${NC}"
+# Show update request
+show_request "PUT" "${API_URL}/api/events/${event_id}" "$update_data"
 
-# Display each event in table format
-echo "$response" | jq -r '.events[] | [.title, (.start_time | strptime("%Y-%m-%dT%H:%M:%SZ") | strftime("%Y-%m-%d %H:%M")), (.end_time | strptime("%Y-%m-%dT%H:%M:%SZ") | strftime("%Y-%m-%d %H:%M")), .id] | @tsv' | while IFS=$'\t' read -r title start_time end_time id; do
-    echo -e "${CYAN}$title\t$start_time\t$end_time\t$id${NC}"
-done
+response=$(curl -s -H "Content-Type: application/json" -H "X-API-Key: $API_KEY" -X PUT -d "${update_data}" "${API_URL}/api/events/${event_id}") || {
+  error "Event update failed"
+  exit 1
+}
 
-# Delete test event
-print_header "Cleaning Up - Deleting Test Event"
-make_request "DELETE" "/api/events/$event_id"
+success "Event updated: $(echo "$response" | jq -r '.title')"
+event_details "$response"
 
-echo -e "\n${GREEN}API testing completed!${NC}" 
+# 7. List all events
+print_header "Listing all events"
+show_request "GET" "${API_URL}/api/events"
+response=$(curl -s -H "X-API-Key: $API_KEY" "${API_URL}/api/events")
+count=$(echo "$response" | jq -r '.events | length')
+
+success "Total events: ${count}"
+
+# Display events table with description
+display_events "$response"
+
+# 8. Delete the test event
+print_header "Cleaning up – deleting test event"
+show_request "DELETE" "${API_URL}/api/events/${event_id}"
+if curl -s -H "X-API-Key: $API_KEY" -X DELETE "${API_URL}/api/events/${event_id}" >/dev/null; then
+  success "Test event deleted successfully"
+else
+  error "Event deletion failed"
+fi
+
+print_header "API testing completed!" 

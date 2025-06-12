@@ -34,10 +34,29 @@ Write-Host "Using API URL: $API_URL"
 Write-Host "Using API Key: $API_KEY"
 Write-Host ""
 
+# Helper to describe the request being sent
+function Show-Request {
+    param(
+        [string]$Method,
+        [string]$Uri,
+        [string]$Body = ""
+    )
+    Write-Host "--> $Method $Uri" -ForegroundColor Cyan
+    if ($Body) {
+        try {
+            $pretty = $Body | ConvertFrom-Json | ConvertTo-Json -Depth 5
+            Write-Host $pretty -ForegroundColor Cyan
+        } catch {
+            Write-Host $Body -ForegroundColor Cyan
+        }
+    }
+}
+
 Write-Host "Testing Calendar API..." -ForegroundColor Green
 
 # 1. Test health endpoint (public)
 Write-Host "`nTesting health endpoint..." -ForegroundColor Yellow
+Show-Request -Method GET -Uri "$API_URL/health"
 try {
     $health = Invoke-RestMethod -Uri "$API_URL/health" -Method GET
     Write-Host "SUCCESS: Health: $($health.status)" -ForegroundColor Green
@@ -48,6 +67,7 @@ try {
 
 # 2. Test version endpoint (public)  
 Write-Host "`nTesting version endpoint..." -ForegroundColor Yellow
+Show-Request -Method GET -Uri "$API_URL/version"
 try {
     $version = Invoke-RestMethod -Uri "$API_URL/version" -Method GET
     Write-Host "SUCCESS: Version: $($version.version)" -ForegroundColor Green
@@ -57,6 +77,7 @@ try {
 
 # 3. Test authentication (list events)
 Write-Host "`nTesting authentication..." -ForegroundColor Yellow
+Show-Request -Method GET -Uri "$API_URL/api/events"
 try {
     $events = Invoke-RestMethod -Uri "$API_URL/api/events" -Method GET -Headers $headers
     Write-Host "SUCCESS: Authentication successful. Found $($events.count) events" -ForegroundColor Green
@@ -88,6 +109,8 @@ $eventData = @{
     end_time = (Get-Date).AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ")
 } | ConvertTo-Json
 
+Show-Request -Method POST -Uri "$API_URL/api/events" -Body $eventData
+
 try {
     $newEvent = Invoke-RestMethod -Uri "$API_URL/api/events" -Method POST -Headers $headers -Body $eventData
     Write-Host "SUCCESS: Event created with ID: $($newEvent.id)" -ForegroundColor Green
@@ -100,6 +123,7 @@ try {
 
 # 5. Get the created event
 Write-Host "`nRetrieving created event..." -ForegroundColor Yellow
+Show-Request -Method GET -Uri "$API_URL/api/events/$eventId"
 try {
     $retrievedEvent = Invoke-RestMethod -Uri "$API_URL/api/events/$eventId" -Method GET -Headers $headers
     Write-Host "SUCCESS: Retrieved event: $($retrievedEvent.title)" -ForegroundColor Green
@@ -117,6 +141,8 @@ $updateData = @{
     end_time = $newEvent.end_time
 } | ConvertTo-Json
 
+Show-Request -Method PUT -Uri "$API_URL/api/events/$eventId" -Body $updateData
+
 try {
     $updatedEvent = Invoke-RestMethod -Uri "$API_URL/api/events/$eventId" -Method PUT -Headers $headers -Body $updateData
     Write-Host "SUCCESS: Event updated: $($updatedEvent.title)" -ForegroundColor Green
@@ -127,6 +153,7 @@ try {
 
 # 7. List all events again
 Write-Host "`nListing all events..." -ForegroundColor Yellow
+Show-Request -Method GET -Uri "$API_URL/api/events"
 try {
     $allEvents = Invoke-RestMethod -Uri "$API_URL/api/events" -Method GET -Headers $headers
     Write-Host "SUCCESS: Total events: $($allEvents.count)" -ForegroundColor Green
@@ -147,6 +174,7 @@ try {
 
 # 8. Delete the test event
 Write-Host "`nCleaning up - deleting test event..." -ForegroundColor Yellow
+Show-Request -Method DELETE -Uri "$API_URL/api/events/$eventId"
 try {
     Invoke-RestMethod -Uri "$API_URL/api/events/$eventId" -Method DELETE -Headers $headers
     Write-Host "SUCCESS: Test event deleted successfully" -ForegroundColor Green

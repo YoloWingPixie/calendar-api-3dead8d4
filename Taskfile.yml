@@ -19,6 +19,7 @@ tasks:
             echo "Waiting for server to start..."
             sleep 5
           fi
+          chmod +x ./tests/api_demo.sh
           doppler run -- ./tests/api_demo.sh
           if ! docker ps | grep -q calendar-api-server; then
             task: docker:down
