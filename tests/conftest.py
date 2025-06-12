@@ -5,30 +5,27 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from src.core.config import settings
 from src.core.database import get_db
-from src.main import app
+from src.main import create_app
 
 
 @pytest.fixture
 def mock_db():
     """Create a mock database session."""
-    db = MagicMock()
-    return db
+    # This can be a more sophisticated mock if needed, e.g., an in-memory SQLite
+    yield MagicMock()
 
 
 @pytest.fixture
-def client(mock_db):
-    """Create a test client with mocked database."""
-    settings.testing = True
+def app(mock_db):
+    """Create a FastAPI app instance with a mocked database."""
+    app = create_app(use_lifespan=False)
+    app.dependency_overrides[get_db] = lambda: mock_db
+    return app
 
-    def override_get_db():
-        yield mock_db
 
-    app.dependency_overrides[get_db] = override_get_db
-
-    with TestClient(app) as test_client:
-        yield test_client
-
-    # Clear overrides after test
-    app.dependency_overrides.clear()
+@pytest.fixture
+def client(app):
+    """Create a test client."""
+    with TestClient(app) as client:
+        yield client
