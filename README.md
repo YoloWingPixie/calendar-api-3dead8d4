@@ -1,6 +1,9 @@
 # Calendar API
 
-[![CI](https://github.com/YoloWingPixie/calendar-api/actions/workflows/ci.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api/actions/workflows/ci.yml)
+[![CI](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/ci.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/ci.yml)
+[![Staging Deploy](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/staging-deploy.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/staging-deploy.yml)
+[![Production Deploy](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/production-deploy.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/production-deploy.yml)
+[![Terraform](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/terraform-deployment.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/terraform-deployment.yml)
 
 A centralized backend REST API service for calendar and event management, designed to replace fragmented legacy calendar tools within the organization.
 
