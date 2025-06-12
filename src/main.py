@@ -16,11 +16,16 @@ from src.models import User
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # On startup, seed the root user if it doesn't exist.
     logger = logging.getLogger(__name__)
-    logger.info("Application startup...")
+    logger.info("Application startup: Seeding database...")
 
-    db = SessionLocal()
+    db = None
     try:
+        logger.info("Attempting to connect to the database for user seeding...")
+        db = SessionLocal()
+        logger.info("Database session created for user seeding.")
+
         if settings.bootstrap_admin_key:
+            logger.info("`BOOTSTRAP_ADMIN_KEY` is set, checking for root user...")
             user = db.query(User).filter(User.username == "root").first()
             if not user:
                 logger.info("Root user not found, creating it...")
@@ -29,9 +34,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 )
                 db.add(root_user)
                 db.commit()
-                logger.info("Root user created successfully.")
+                logger.info("Root user created and committed successfully.")
+            else:
+                logger.info("Root user already exists, skipping creation.")
+        else:
+            logger.warning(
+                "`BOOTSTRAP_ADMIN_KEY` not set, skipping root user creation."
+            )
+    except Exception as e:
+        logger.exception("Error during startup user seeding: %s", e)
     finally:
-        db.close()
+        if db:
+            db.close()
+            logger.info("Database session for user seeding closed.")
 
     yield
     # On shutdown
@@ -40,18 +55,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app(use_lifespan: bool = True) -> FastAPI:
     """Create and configure the FastAPI application."""
+    # Configure logging
+    logging.basicConfig(
+        level=settings.log_level.upper(),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
     app_lifespan = lifespan if use_lifespan else None
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
         debug=settings.debug,
         lifespan=app_lifespan,
-    )
-
-    # Configure logging
-    logging.basicConfig(
-        level=settings.log_level.upper(),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
     # Register all routes dynamically
