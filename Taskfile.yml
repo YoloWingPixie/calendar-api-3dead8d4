@@ -66,8 +66,7 @@ tasks:
   dev:
     desc: Run development server in Docker
     cmds:
-      - docker-compose -f docker/docker-compose.yml up -d db
-      - doppler run -- docker-compose -f docker/docker-compose.yml up api
+      - doppler run -- docker-compose -f docker/docker-compose.yml up --build -d
 
   dev:local:
     desc: Run development server locally

@@ -136,6 +136,8 @@ jobs:
           uv run mypy src/
 
       - name: Run tests
+        env:
+          DATABASE_URL: "postgresql://test:test@localhost/test"
         run: |
           uv run pytest tests/ -v --cov=src --cov-report=term-missing
 
