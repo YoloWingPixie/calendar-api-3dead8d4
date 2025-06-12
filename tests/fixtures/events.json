@@ -1,0 +1,34 @@
+{
+  "events": [
+    {
+      "title": "Team Standup",
+      "description": "Daily team sync meeting",
+      "start_time": "2024-03-20T10:00:00Z",
+      "end_time": "2024-03-20T10:30:00Z"
+    },
+    {
+      "title": "Project Planning",
+      "description": "Q2 project planning session",
+      "start_time": "2024-03-21T14:00:00Z",
+      "end_time": "2024-03-21T16:00:00Z"
+    },
+    {
+      "title": "Code Review",
+      "description": "Review pull requests",
+      "start_time": "2024-03-22T11:00:00Z",
+      "end_time": "2024-03-22T12:00:00Z"
+    },
+    {
+      "title": "Client Meeting",
+      "description": "Discuss new requirements",
+      "start_time": "2024-03-23T09:00:00Z",
+      "end_time": "2024-03-23T10:00:00Z"
+    },
+    {
+      "title": "Team Building",
+      "description": "Virtual team building activity",
+      "start_time": "2024-03-24T15:00:00Z",
+      "end_time": "2024-03-24T17:00:00Z"
+    }
+  ]
+} 

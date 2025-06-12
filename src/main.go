@@ -11,7 +11,35 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+var (
+	logger *zap.Logger
+)
+
+func init() {
+	// Configure structured JSON logging
+	config := zap.NewProductionConfig()
+	config.EncoderConfig.TimeKey = "timestamp"
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	config.EncoderConfig.MessageKey = "message"
+	config.EncoderConfig.LevelKey = "level"
+	config.EncoderConfig.NameKey = "logger"
+	config.EncoderConfig.CallerKey = "caller"
+	config.EncoderConfig.StacktraceKey = "stacktrace"
+
+	var err error
+	logger, err = config.Build()
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer func() {
+		_ = logger.Sync() // Ignore sync errors on stderr/stdout
+	}()
+}
 
 func main() {
 	log.Println("🚀 Starting Calendar API...")
@@ -58,7 +86,7 @@ func main() {
 	// Initialize handlers
 	eventHandler := NewEventHandler(eventRepo)
 
-	// Setup routes
+	// Initialize router
 	r := mux.NewRouter()
 
 	// Public routes (no authentication required)
@@ -75,8 +103,12 @@ func main() {
 	api.HandleFunc("/events/{id}", eventHandler.DeleteEvent).Methods("DELETE")
 
 	// Middleware
-	r.Use(loggingMiddleware)
-	r.Use(corsMiddleware)
+	r.Use(LoggingMiddleware)
+	r.Use(MetricsMiddleware)
+	r.Use(CORSMiddleware)
+
+	// Add Prometheus metrics endpoint
+	r.Path("/metrics").Handler(promhttp.Handler())
 
 	// Server configuration
 	addr := config.Host + ":" + config.Port
@@ -119,15 +151,34 @@ func main() {
 }
 
 // Middleware functions
-func loggingMiddleware(next http.Handler) http.Handler {
+func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		log.Printf("%s %s %s", r.Method, r.RequestURI, time.Since(start))
-		next.ServeHTTP(w, r)
+		path := r.URL.Path
+		method := r.Method
+
+		// Create a custom response writer to capture the status code
+		rw := &responseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+
+		next.ServeHTTP(rw, r)
+
+		// Log request details
+		duration := time.Since(start)
+		logger.Info("HTTP request completed",
+			zap.String("method", method),
+			zap.String("path", path),
+			zap.Int("status", rw.statusCode),
+			zap.Duration("duration", duration),
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.String("user_agent", r.UserAgent()),
+		)
 	})
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

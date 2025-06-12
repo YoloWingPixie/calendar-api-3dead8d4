@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -26,6 +27,11 @@ func NewEventHandler(repo EventRepositoryInterface) *EventHandler {
 
 // ListEvents handles GET /api/events
 func (h *EventHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	defer func() {
+		RecordDBOperation("list", "events", time.Since(start))
+	}()
+
 	events, err := h.repo.List()
 	if err != nil {
 		h.errorResponse(w, http.StatusInternalServerError, "Failed to retrieve events", err)
@@ -42,6 +48,11 @@ func (h *EventHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 
 // GetEvent handles GET /api/events/{id}
 func (h *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	defer func() {
+		RecordDBOperation("get", "events", time.Since(start))
+	}()
+
 	vars := mux.Vars(r)
 	id := vars["id"]
 
@@ -59,8 +70,24 @@ func (h *EventHandler) GetEvent(w http.ResponseWriter, r *http.Request) {
 	h.jsonResponse(w, http.StatusOK, event)
 }
 
+// sanitizeString removes potentially dangerous characters from input strings
+func sanitizeString(s string) string {
+	// Replace HTML special characters with their escaped versions
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&#39;")
+	return s
+}
+
 // CreateEvent handles POST /api/events
 func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	defer func() {
+		RecordDBOperation("create", "events", time.Since(start))
+	}()
+
 	var req CreateEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.errorResponse(w, http.StatusBadRequest, "Invalid request body", err)
@@ -71,6 +98,13 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	if err := h.validator.Struct(req); err != nil {
 		h.validationErrorResponse(w, err)
 		return
+	}
+
+	// Sanitize input strings
+	req.Title = sanitizeString(req.Title)
+	if req.Description != nil {
+		sanitizedDesc := sanitizeString(*req.Description)
+		req.Description = &sanitizedDesc
 	}
 
 	// Parse times
@@ -105,11 +139,20 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Record metrics
+	eventsCreatedTotal.Inc()
+	activeEvents.Inc()
+
 	h.jsonResponse(w, http.StatusCreated, event)
 }
 
 // UpdateEvent handles PUT /api/events/{id}
 func (h *EventHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	defer func() {
+		RecordDBOperation("update", "events", time.Since(start))
+	}()
+
 	vars := mux.Vars(r)
 	id := vars["id"]
 
@@ -123,6 +166,13 @@ func (h *EventHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	if err := h.validator.Struct(req); err != nil {
 		h.validationErrorResponse(w, err)
 		return
+	}
+
+	// Sanitize input strings
+	req.Title = sanitizeString(req.Title)
+	if req.Description != nil {
+		sanitizedDesc := sanitizeString(*req.Description)
+		req.Description = &sanitizedDesc
 	}
 
 	// Check if event exists
@@ -186,6 +236,11 @@ func (h *EventHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 
 // DeleteEvent handles DELETE /api/events/{id}
 func (h *EventHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	defer func() {
+		RecordDBOperation("delete", "events", time.Since(start))
+	}()
+
 	vars := mux.Vars(r)
 	id := vars["id"]
 
@@ -197,6 +252,10 @@ func (h *EventHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 		h.errorResponse(w, http.StatusInternalServerError, "Failed to delete event", err)
 		return
 	}
+
+	// Record metrics
+	eventsDeletedTotal.Inc()
+	activeEvents.Dec()
 
 	w.WriteHeader(http.StatusNoContent)
 }

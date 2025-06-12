@@ -1,0 +1,369 @@
+swagger: "2.0"
+info:
+  title: Calendar API
+  description: A centralized backend REST API service for calendar and event management
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@calendar-api.com
+host: localhost:8000
+basePath: /
+schemes:
+  - http
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+
+securityDefinitions:
+  apiKey:
+    type: apiKey
+    in: header
+    name: X-API-Key
+
+definitions:
+  Event:
+    type: object
+    required:
+      - title
+      - start_time
+      - end_time
+    properties:
+      id:
+        type: string
+        format: uuid
+        readOnly: true
+        example: "550e8400-e29b-41d4-a716-446655440001"
+      title:
+        type: string
+        minLength: 1
+        maxLength: 255
+        example: "Team Meeting"
+      description:
+        type: string
+        maxLength: 1000
+        example: "Weekly team sync to discuss project progress"
+      start_time:
+        type: string
+        format: date-time
+        example: "2024-12-15T10:00:00Z"
+      end_time:
+        type: string
+        format: date-time
+        example: "2024-12-15T11:00:00Z"
+      created_at:
+        type: string
+        format: date-time
+        readOnly: true
+        example: "2024-12-01T09:00:00Z"
+      updated_at:
+        type: string
+        format: date-time
+        readOnly: true
+        example: "2024-12-01T09:00:00Z"
+
+  Error:
+    type: object
+    required:
+      - error
+    properties:
+      error:
+        type: object
+        required:
+          - code
+          - message
+        properties:
+          code:
+            type: string
+            example: "VALIDATION_ERROR"
+          message:
+            type: string
+            example: "The request body is invalid"
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the API
+      operationId: healthCheck
+      tags:
+        - system
+      security: []
+      responses:
+        200:
+          description: API is healthy
+          schema:
+            type: object
+            required:
+              - status
+              - timestamp
+            properties:
+              status:
+                type: string
+                example: "healthy"
+              timestamp:
+                type: string
+                format: date-time
+              version:
+                type: string
+                example: "1.0.0"
+              database:
+                type: string
+                example: "connected"
+
+  /events:
+    get:
+      summary: List all events
+      description: Retrieve a list of all calendar events
+      operationId: listEvents
+      tags:
+        - events
+      security:
+        - apiKey: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of items to return
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          default: 20
+        - name: offset
+          in: query
+          description: Number of items to skip
+          type: integer
+          format: int32
+          minimum: 0
+          default: 0
+        - name: start_date
+          in: query
+          description: Filter events starting from this date (inclusive)
+          type: string
+          format: date-time
+        - name: end_date
+          in: query
+          description: Filter events ending before this date (exclusive)
+          type: string
+          format: date-time
+      responses:
+        200:
+          description: A list of events
+          schema:
+            type: array
+            items:
+              $ref: "#/definitions/Event"
+        400:
+          description: Bad request
+          schema:
+            $ref: "#/definitions/Error"
+        401:
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/Error"
+        500:
+          description: Internal server error
+          schema:
+            $ref: "#/definitions/Error"
+
+    post:
+      summary: Create a new event
+      description: Create a new calendar event
+      operationId: createEvent
+      tags:
+        - events
+      security:
+        - apiKey: []
+      parameters:
+        - name: body
+          in: body
+          description: Event to create
+          required: true
+          schema:
+            type: object
+            required:
+              - title
+              - start_time
+              - end_time
+            properties:
+              title:
+                type: string
+                minLength: 1
+                maxLength: 255
+              description:
+                type: string
+                maxLength: 1000
+              start_time:
+                type: string
+                format: date-time
+              end_time:
+                type: string
+                format: date-time
+      responses:
+        201:
+          description: Event created successfully
+          schema:
+            $ref: "#/definitions/Event"
+        400:
+          description: Invalid input
+          schema:
+            $ref: "#/definitions/Error"
+        401:
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/Error"
+        500:
+          description: Internal server error
+          schema:
+            $ref: "#/definitions/Error"
+
+  /events/{eventId}:
+    get:
+      summary: Get event by ID
+      description: Retrieve a specific calendar event by its ID
+      operationId: getEvent
+      tags:
+        - events
+      security:
+        - apiKey: []
+      parameters:
+        - name: eventId
+          in: path
+          description: ID of event to retrieve
+          required: true
+          type: string
+          format: uuid
+      responses:
+        200:
+          description: Event found
+          schema:
+            $ref: "#/definitions/Event"
+        401:
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/Error"
+        404:
+          description: Event not found
+          schema:
+            $ref: "#/definitions/Error"
+        500:
+          description: Internal server error
+          schema:
+            $ref: "#/definitions/Error"
+
+    put:
+      summary: Update an event
+      description: Update an existing calendar event
+      operationId: updateEvent
+      tags:
+        - events
+      security:
+        - apiKey: []
+      parameters:
+        - name: eventId
+          in: path
+          description: ID of event to update
+          required: true
+          type: string
+          format: uuid
+        - name: body
+          in: body
+          description: Updated event data
+          required: true
+          schema:
+            type: object
+            required:
+              - title
+              - start_time
+              - end_time
+            properties:
+              title:
+                type: string
+                minLength: 1
+                maxLength: 255
+              description:
+                type: string
+                maxLength: 1000
+              start_time:
+                type: string
+                format: date-time
+              end_time:
+                type: string
+                format: date-time
+      responses:
+        200:
+          description: Event updated successfully
+          schema:
+            $ref: "#/definitions/Event"
+        400:
+          description: Invalid input
+          schema:
+            $ref: "#/definitions/Error"
+        401:
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/Error"
+        404:
+          description: Event not found
+          schema:
+            $ref: "#/definitions/Error"
+        500:
+          description: Internal server error
+          schema:
+            $ref: "#/definitions/Error"
+
+    delete:
+      summary: Delete an event
+      description: Delete a calendar event
+      operationId: deleteEvent
+      tags:
+        - events
+      security:
+        - apiKey: []
+      parameters:
+        - name: eventId
+          in: path
+          description: ID of event to delete
+          required: true
+          type: string
+          format: uuid
+      responses:
+        204:
+          description: Event deleted successfully
+        401:
+          description: Unauthorized
+          schema:
+            $ref: "#/definitions/Error"
+        404:
+          description: Event not found
+          schema:
+            $ref: "#/definitions/Error"
+        500:
+          description: Internal server error
+          schema:
+            $ref: "#/definitions/Error"
+
+  /version:
+    get:
+      summary: Get API version
+      description: Returns version information about the API
+      operationId: getVersion
+      tags:
+        - system
+      security: []
+      responses:
+        200:
+          description: Version information
+          schema:
+            type: object
+            properties:
+              version:
+                type: string
+                example: "1.0.0"
+              commit:
+                type: string
+                example: "abc123"
+              date:
+                type: string
+                example: "2024-12-15T10:00:00Z"

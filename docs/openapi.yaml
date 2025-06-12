@@ -1,13 +1,14 @@
 openapi: 3.0.3
 info:
   title: Calendar API
-  description: API for managing calendars and calendar events
+  description: A centralized backend REST API service for calendar and event management
   version: 1.0.0
   contact:
-    name: Zachary Maynard
+    name: API Support
+    email: support@calendar-api.com
 
 servers:
-  - url: /api
+  - url: /
     description: API v1
 
 components:
@@ -21,335 +22,158 @@ components:
   schemas:
     Error:
       type: object
+      required:
+        - error
       properties:
         error:
-          type: string
-        detail:
-          type: string
-        code:
-          type: string
-
-    # Domain Model Schemas
-    UserCreate:
-      type: object
-      required:
-        - username
-      properties:
-        username:
-          type: string
-          minLength: 1
-          maxLength: 255
-
-    UserResponse:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        username:
-          type: string
-        owned_calendar_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    UserWithAccessKey:
-      allOf:
-        - $ref: '#/components/schemas/UserResponse'
-        - type: object
+          type: object
+          required:
+            - code
+            - message
           properties:
-            access_key:
+            code:
               type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "The request body is invalid"
 
-    CalendarCreate:
-      type: object
-      required:
-        - calendar_name
-      properties:
-        calendar_name:
-          type: string
-          minLength: 1
-          maxLength: 255
-        editor_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-          default: []
-        reader_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-          default: []
-        public_read:
-          type: boolean
-          default: false
-        public_write:
-          type: boolean
-          default: false
-
-    CalendarUpdate:
-      type: object
-      properties:
-        calendar_name:
-          type: string
-          minLength: 1
-          maxLength: 255
-        editor_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        reader_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        public_read:
-          type: boolean
-        public_write:
-          type: boolean
-
-    CalendarResponse:
-      type: object
-      properties:
-        calendar_id:
-          type: string
-          format: uuid
-        owner_user_id:
-          type: string
-          format: uuid
-        calendar_name:
-          type: string
-        editor_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        reader_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        public_read:
-          type: boolean
-        public_write:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    CalendarEventCreate:
+    Event:
       type: object
       required:
         - title
         - start_time
         - end_time
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 255
-        description:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        is_all_day:
-          type: boolean
-          default: false
-
-    CalendarEventUpdate:
-      type: object
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 255
-        description:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        is_all_day:
-          type: boolean
-
-    CalendarEventResponse:
-      type: object
-      properties:
-        event_id:
-          type: string
-          format: uuid
-        calendar_id:
-          type: string
-          format: uuid
-        creator_user_id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        description:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-        is_all_day:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-
-    # Minimum Required Event Schemas
-    EventCreate:
-      type: object
-      required:
-        - title
-        - start_time
-        - end_time
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 255
-        description:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-
-    EventUpdate:
-      type: object
-      properties:
-        title:
-          type: string
-          minLength: 1
-          maxLength: 255
-        description:
-          type: string
-        start_time:
-          type: string
-          format: date-time
-        end_time:
-          type: string
-          format: date-time
-
-    EventResponse:
-      type: object
       properties:
         id:
           type: string
           format: uuid
+          readOnly: true
+          example: "550e8400-e29b-41d4-a716-446655440001"
         title:
           type: string
+          minLength: 1
+          maxLength: 255
+          example: "Team Meeting"
         description:
           type: string
+          maxLength: 1000
+          example: "Weekly team sync to discuss project progress"
         start_time:
           type: string
           format: date-time
+          example: "2024-12-15T10:00:00Z"
         end_time:
           type: string
           format: date-time
+          example: "2024-12-15T11:00:00Z"
         created_at:
           type: string
           format: date-time
+          readOnly: true
+          example: "2024-12-01T09:00:00Z"
         updated_at:
           type: string
           format: date-time
-
-    PaginationParams:
-      type: object
-      properties:
-        page:
-          type: integer
-          minimum: 1
-          default: 1
-        page_size:
-          type: integer
-          minimum: 1
-          maximum: 100
-          default: 20
-
-    PaginatedResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            type: object
-        total:
-          type: integer
-        page:
-          type: integer
-        page_size:
-          type: integer
-        total_pages:
-          type: integer
+          readOnly: true
+          example: "2024-12-01T09:00:00Z"
 
     HealthResponse:
       type: object
+      required:
+        - status
+        - timestamp
       properties:
         status:
           type: string
-          enum: [healthy, degraded, unhealthy]
-        version:
-          type: string
+          example: "healthy"
         timestamp:
           type: string
           format: date-time
+        version:
+          type: string
+          example: "1.0.0"
+        database:
+          type: string
+          example: "connected"
 
 paths:
   /health:
     get:
       summary: Health check endpoint
+      description: Returns the health status of the API
+      operationId: healthCheck
+      tags:
+        - system
+      security: []
       responses:
         '200':
-          description: Health status
+          description: API is healthy
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
 
-  # Minimum Required Endpoints
   /events:
     get:
       summary: List all events
+      description: Retrieve a list of all calendar events
+      operationId: listEvents
+      tags:
+        - events
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of items to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of items to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: start_date
+          in: query
+          description: Filter events starting from this date (inclusive)
+          schema:
+            type: string
+            format: date-time
+        - name: end_date
+          in: query
+          description: Filter events ending before this date (exclusive)
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
-          description: List of events
+          description: A list of events
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/EventResponse'
+                  $ref: '#/components/schemas/Event'
         '400':
-          description: Invalid request
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -357,67 +181,87 @@ paths:
 
     post:
       summary: Create a new event
+      description: Create a new calendar event
+      operationId: createEvent
+      tags:
+        - events
+      security:
+        - ApiKeyAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EventCreate'
+              type: object
+              required:
+                - title
+                - start_time
+                - end_time
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                description:
+                  type: string
+                  maxLength: 1000
+                start_time:
+                  type: string
+                  format: date-time
+                end_time:
+                  type: string
+                  format: date-time
       responses:
         '201':
-          description: Event created
+          description: Event created successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EventResponse'
+                $ref: '#/components/schemas/Event'
         '400':
-          description: Invalid request
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /events/{id}:
+  /events/{eventId}:
     parameters:
-      - name: id
+      - name: eventId
         in: path
         required: true
         schema:
           type: string
           format: uuid
     get:
-      summary: Get specific event
+      summary: Get event by ID
+      description: Retrieve a specific calendar event by its ID
+      operationId: getEvent
+      tags:
+        - events
+      security:
+        - ApiKeyAuth: []
       responses:
         '200':
-          description: Event details
+          description: Event found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EventResponse'
-        '404':
-          description: Event not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-
-    put:
-      summary: Update existing event
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EventUpdate'
-      responses:
-        '200':
-          description: Event updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EventResponse'
-        '400':
-          description: Invalid request
+                $ref: '#/components/schemas/Event'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -428,14 +272,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-
-    delete:
-      summary: Delete event
-      responses:
-        '204':
-          description: Event deleted
-        '404':
-          description: Event not found
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
