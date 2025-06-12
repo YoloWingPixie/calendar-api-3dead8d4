@@ -1,5 +1,7 @@
 """Calendar API main module."""
 
+import logging
+
 from fastapi import FastAPI
 
 from src.core.config import settings
@@ -13,6 +15,10 @@ def create_app() -> FastAPI:
         version=settings.version,
         debug=settings.debug,
     )
+
+    # Configure logging
+    logging.basicConfig(level=settings.log_level.upper())
+    logging.info(f"Configured database is: {settings.database_url}")
 
     # Register all routes dynamically
     register_routers(app)
