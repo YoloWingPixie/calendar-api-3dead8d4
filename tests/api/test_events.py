@@ -43,7 +43,7 @@ def test_create_event(client: TestClient, mock_db) -> None:
 
 def test_get_events(client: TestClient, mock_db) -> None:
     """Test getting all events."""
-    response = client.get("/api/v1/events")
+    response = client.get("/api/v1/events", headers={"X-API-Key": "test-key"})
     assert response.status_code == status.HTTP_200_OK
     assert isinstance(response.json(), list)
 
@@ -61,11 +61,15 @@ def test_get_event(client: TestClient, mock_db) -> None:
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )
+    # Mock user lookup first, then event lookup
+    mock_user = User(username="root")
     mock_query = MagicMock()
-    mock_query.filter.return_value.first.return_value = mock_event
+    mock_query.filter.return_value.first.side_effect = [mock_user, mock_event]
     mock_db.query.return_value = mock_query
 
-    response = client.get(f"/api/v1/events/{event_id}")
+    response = client.get(
+        f"/api/v1/events/{event_id}", headers={"X-API-Key": "test-key"}
+    )
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["title"] == "Test Event"
 

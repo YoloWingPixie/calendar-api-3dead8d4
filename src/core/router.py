@@ -45,6 +45,6 @@ def register_routers(app: FastAPI) -> None:
     """
     v1_router = APIRouter(prefix=settings.api_v1_str)
     v1_router.include_router(health.router)
-    v1_router.include_router(events.router)
+    v1_router.include_router(events.router, prefix="/events", tags=["events"])
 
     app.include_router(v1_router)

@@ -1,100 +1,116 @@
-"""Event management endpoints."""
+"""Event-related API endpoints."""
 
 import logging
-from typing import Annotated
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from src.core.auth import CurrentUser
 from src.core.database import get_db
-from src.models.calendar_event import CalendarEvent
-from src.schemas.calendar_event import (
-    CalendarEventCreate,
-    CalendarEventResponse,
-    CalendarEventUpdate,
-)
+from src.core.security import get_current_user
+from src.models import CalendarEvent, User
+from src.schemas.event import EventCreate, EventResponse, EventUpdate
 
-router = APIRouter(prefix="/events", tags=["events"])
+router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post(
-    "", response_model=CalendarEventResponse, status_code=status.HTTP_201_CREATED
-)
-async def create_event(
-    event_data: CalendarEventCreate,
-    current_user: CurrentUser,
-    db: Annotated[Session, Depends(get_db)],
-) -> CalendarEvent:
-    """Create a new event."""
-    logger.info(f"User '{current_user.username}' creating event '{event_data.title}'")
-    new_event = CalendarEvent(**event_data.model_dump())
-    db.add(new_event)
-    db.commit()
-    db.refresh(new_event)
-    logger.info(f"Successfully created event '{new_event.event_id}'")
-    return new_event
-
-
-@router.get("", response_model=list[CalendarEventResponse])
-async def get_events(
-    db: Annotated[Session, Depends(get_db)],
-) -> list[CalendarEvent]:
-    """Get all events."""
+@router.get("/", response_model=list[EventResponse])
+def list_events(
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+) -> Any:
+    """Retrieve all events for the current user."""
+    logger.info("User '%s' listing all events.", current_user.username)
+    # This is a toy app, so for now we return all events.
+    # In a real app, this would be filtered by user/calendar permissions.
     events = db.query(CalendarEvent).all()
+    logger.info("Found %d events", len(events))
     return events
 
 
-@router.get("/{event_id}", response_model=CalendarEventResponse)
-async def get_event(
+@router.post("/", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
+def create_event(
+    event_in: EventCreate,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+) -> Any:
+    """Create a new event."""
+    logger.info("User '%s' creating event: '%s'", current_user.username, event_in.title)
+    db_event = CalendarEvent(**event_in.model_dump())
+    db.add(db_event)
+    logger.info("Added event to session, committing...")
+    db.commit()
+    logger.info("Event committed, refreshing...")
+    db.refresh(db_event)
+    logger.info("Event created with ID: %s", db_event.event_id)
+    return db_event
+
+
+@router.get("/{event_id}", response_model=EventResponse)
+def get_event(
     event_id: UUID,
-    db: Annotated[Session, Depends(get_db)],
-) -> CalendarEvent:
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+) -> Any:
     """Get a single event by ID."""
+    logger.info("User '%s' fetching event ID: %s", current_user.username, event_id)
     event = db.query(CalendarEvent).filter(CalendarEvent.event_id == event_id).first()
     if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+        logger.warning("Event with ID %s not found", event_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
+        )
+    logger.info("Found event: %s", event.title)
     return event
 
 
-@router.put("/{event_id}", response_model=CalendarEventResponse)
-async def update_event(
+@router.put("/{event_id}", response_model=EventResponse)
+def update_event(
     event_id: UUID,
-    event_data: CalendarEventUpdate,
-    current_user: CurrentUser,
-    db: Annotated[Session, Depends(get_db)],
-) -> CalendarEvent:
-    """Update an event."""
-    event = db.query(CalendarEvent).filter(CalendarEvent.event_id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+    event_in: EventUpdate,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
+) -> Any:
+    """Update an existing event."""
+    logger.info("User '%s' updating event ID: %s", current_user.username, event_id)
+    db_event = (
+        db.query(CalendarEvent).filter(CalendarEvent.event_id == event_id).first()
+    )
+    if not db_event:
+        logger.warning("Event with ID %s not found for update", event_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
+        )
 
-    logger.info(f"User '{current_user.username}' updating event '{event_id}'")
-    update_data = event_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(event, key, value)
+    update_data = event_in.model_dump(exclude_unset=True)
+    logger.info("Updating event with data: %s", update_data)
+    for field, value in update_data.items():
+        setattr(db_event, field, value)
 
     db.commit()
-    db.refresh(event)
-    logger.info(f"Successfully updated event '{event.event_id}'")
-    return event
+    db.refresh(db_event)
+    logger.info("Event updated successfully")
+    return db_event
 
 
 @router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_event(
+def delete_event(
     event_id: UUID,
-    current_user: CurrentUser,
-    db: Annotated[Session, Depends(get_db)],
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(get_current_user),  # noqa: B008
 ) -> None:
     """Delete an event."""
-    event = db.query(CalendarEvent).filter(CalendarEvent.event_id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    logger.info(f"User '{current_user.username}' deleting event '{event_id}'")
-    db.delete(event)
+    logger.info("User '%s' deleting event ID: %s", current_user.username, event_id)
+    db_event = (
+        db.query(CalendarEvent).filter(CalendarEvent.event_id == event_id).first()
+    )
+    if not db_event:
+        logger.info("Event with ID %s not found for deletion (idempotent)", event_id)
+        # No exception on delete if not found, it's idempotent.
+        return None
+    db.delete(db_event)
     db.commit()
-    logger.info(f"Successfully deleted event '{event.event_id}'")
+    logger.info("Event deleted successfully")
     return None

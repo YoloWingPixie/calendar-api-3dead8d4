@@ -11,6 +11,15 @@ from src.core.database import SessionLocal
 from src.core.router import register_routers
 from src.models import User
 
+# Configure logging at the module level to ensure it's applied before
+# Uvicorn or other modules can configure it. Using force=True ensures
+# that our configuration replaces any existing handlers.
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    force=True,
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -55,11 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app(use_lifespan: bool = True) -> FastAPI:
     """Create and configure the FastAPI application."""
-    # Configure logging
-    logging.basicConfig(
-        level=settings.log_level.upper(),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    # Logging is now configured at the module level.
 
     app_lifespan = lifespan if use_lifespan else None
     app = FastAPI(
