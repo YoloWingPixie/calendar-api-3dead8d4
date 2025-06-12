@@ -19,45 +19,23 @@ import logging
 import os
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
-
-
-def get_database_url() -> str:
-    """
-    Gets the database URL, prioritizing the Doppler JSON secret.
-    This logic directly mirrors the working implementation in alembic/env.py
-    to ensure consistency and reliability.
-    """
-    doppler_json_str = os.getenv("DOPPLER_SECRETS_JSON")
-    if doppler_json_str:
-        logging.info("Found DOPPLER_SECRETS_JSON, attempting to parse...")
-        try:
-            secrets = json.loads(doppler_json_str)
-            for key in ["DATABASE_URL", "TF_VAR_database_url", "TF_VAR_DATABASE_URL"]:
-                if key in secrets and secrets[key]:
-                    logging.info(f"Using database URL from Doppler secret key: {key}")
-                    return str(secrets[key])
-            raise ValueError(
-                "DATABASE_URL not found in DOPPLER_SECRETS_JSON. "
-                f"Available keys: {list(secrets.keys())}"
-            )
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse DOPPLER_SECRETS_JSON: {e}") from e
-
-    database_url = os.getenv("DATABASE_URL")
-    if database_url:
-        logging.info("Using database URL from DATABASE_URL environment variable.")
-        return database_url
-
-    raise ValueError(
-        "Database URL not configured. Set DATABASE_URL or DOPPLER_SECRETS_JSON."
-    )
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppSettings(BaseSettings):
     """
     Application settings.
+
+    Settings are loaded from the following sources, in order of precedence:
+    1. Doppler secrets (if DOPPLER_SECRETS_JSON env var is set)
+    2. Environment variables
+    3. Values from a .env file (if present)
+    4. Default values defined in this class
     """
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False
+    )
 
     # Core settings
     app_name: str = "Calendar API"
@@ -72,7 +50,7 @@ class AppSettings(BaseSettings):
     port: int = 8000
 
     # Database settings
-    database_url: str = Field(default_factory=get_database_url)
+    database_url: str
     database_echo: bool = Field(default=False)
     database_pool_disabled: bool = Field(default=False)
 
@@ -85,10 +63,30 @@ class AppSettings(BaseSettings):
 @functools.lru_cache
 def get_settings() -> AppSettings:
     """
-    Get the application settings. This is cached to ensure settings are loaded
-    only once.
+    Get the application settings.
+
+    This function is cached to ensure that settings are loaded only once. It
+    loads settings from Doppler, if available, and then initializes the main
+    AppSettings object.
     """
-    return AppSettings()
+    init_kwargs = {}
+    doppler_json_str = os.getenv("DOPPLER_SECRETS_JSON")
+
+    if doppler_json_str:
+        logging.info("Found DOPPLER_SECRETS_JSON, loading secrets...")
+        try:
+            secrets = json.loads(doppler_json_str)
+            # In AWS SM, Doppler secrets are prefixed 'TF_VAR_'. We strip this
+            # prefix and convert to lowercase to match Pydantic model fields.
+            init_kwargs = {
+                key.lower().replace("tf_var_", ""): value
+                for key, value in secrets.items()
+            }
+        except json.JSONDecodeError as e:
+            # Raise an error to prevent starting with a bad config.
+            raise ValueError(f"Failed to parse DOPPLER_SECRETS_JSON: {e}") from e
+
+    return AppSettings(**init_kwargs)
 
 
 # Create a single, importable settings instance
