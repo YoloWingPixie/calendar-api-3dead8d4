@@ -101,18 +101,17 @@ def upgrade() -> None:
     bootstrap_key = op.get_context().config.get_section_option(
         "app:main", "bootstrap_admin_key"
     )
-    if not bootstrap_key:
-        import os
-
-        bootstrap_key = os.environ.get("BOOTSTRAP_ADMIN_KEY")
-
     if bootstrap_key:
+        print("INFO: Bootstrap key found, attempting to create root user.")
         op.execute(f"""
             INSERT INTO users (username, access_key)
             VALUES ('root', '{bootstrap_key}')
             ON CONFLICT (username) DO UPDATE
             SET access_key = EXCLUDED.access_key;
         """)
+        print("INFO: Root user creation command executed.")
+    else:
+        print("INFO: No bootstrap key found, skipping root user creation.")
     # ### end Alembic commands ###
 
 

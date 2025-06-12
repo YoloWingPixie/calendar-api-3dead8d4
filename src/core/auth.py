@@ -18,7 +18,8 @@ async def get_current_user(
     api_key: Annotated[str | None, Header(alias=settings.api_key_header)] = None,
 ) -> User:
     """
-    Get the current user from the provided API key.
+    Get the current user from the provided API key by looking them up in the
+    database.
     """
     if not api_key:
         raise HTTPException(
@@ -26,7 +27,6 @@ async def get_current_user(
             detail="Not authenticated",
         )
 
-    # A single query handles both the bootstrap key and normal user keys.
     user = db.query(User).filter(User.access_key == api_key).first()
 
     if not user:
