@@ -96,25 +96,6 @@ def upgrade() -> None:
         "CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON "
         "calendar_events FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();"
     )
-
-    # Create initial admin user if bootstrap key is provided
-    bootstrap_key = op.get_context().config.get_main_option("bootstrap_admin_key")
-    if bootstrap_key:
-        print("INFO: Bootstrap key found, attempting to create root user.")
-        # Get the underlying connection and execute a raw SQL statement
-        # to ensure the user is created outside of the main transaction.
-        bind = op.get_bind()
-        bind.execute(
-            sa.text(f"""
-            INSERT INTO users (username, access_key)
-            VALUES ('root', '{bootstrap_key}')
-            ON CONFLICT (username) DO UPDATE
-            SET access_key = EXCLUDED.access_key;
-        """)
-        )
-        print("INFO: Root user creation command executed.")
-    else:
-        print("INFO: No bootstrap key found, skipping root user creation.")
     # ### end Alembic commands ###
 
 
