@@ -107,6 +107,7 @@ def upgrade() -> None:
             ON CONFLICT (username) DO UPDATE
             SET access_key = EXCLUDED.access_key;
         """)
+        op.execute("COMMIT;")
         print("INFO: Root user creation command executed.")
     else:
         print("INFO: No bootstrap key found, skipping root user creation.")
