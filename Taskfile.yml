@@ -96,7 +96,7 @@ tasks:
   test:
     desc: Run tests with coverage
     cmds:
-      - doppler run -- go test ./... -v -cover -coverprofile=coverage.out
+      - go test ./... -v -cover -coverprofile=coverage.out
 
   test:local:
     desc: Run tests locally without doppler
@@ -106,18 +106,13 @@ tasks:
   dev:
     desc: Run development server in Docker
     cmds:
-      - doppler run -- docker-compose -f docker/docker-compose.yml up --build -d
-
-  dev:local:
-    desc: Run development server locally
-    cmds:
-      - cd src && doppler run -- go run .
+      - docker-compose -f docker/docker-compose.yml up --build -d
 
   run:
     desc: Run the application locally
     deps: [build]
     cmds:
-      - doppler run -- ./bin/calendar-api
+      - ./bin/calendar-api
 
   docker:build:
     desc: Build Docker images
@@ -133,19 +128,6 @@ tasks:
     desc: Show Docker logs
     cmds:
       - docker-compose -f docker/docker-compose.yml logs -f
-
-  docker:run:
-    desc: Build and run the Docker container standalone with version information
-    vars:
-      VERSION:
-        sh: powershell -Command "if (Test-Path VERSION) { 'v' + (Get-Content VERSION).Trim() } else { 'v0.0.0-dev' }" || echo "v0.0.0-dev"
-      COMMIT:
-        sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
-      DATE:
-        sh: powershell -Command "(Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')" || echo "unknown"
-    cmds:
-      - docker build -t calendar-api:local -f docker/Dockerfile --build-arg VERSION={{.VERSION}} --build-arg COMMIT={{.COMMIT}} --build-arg DATE={{.DATE}} .
-      - doppler run -- docker run --rm -it -p 8000:8000 --name calendar-api-local calendar-api:local
 
   # Database management tasks
   db:start:
@@ -184,27 +166,10 @@ tasks:
       - docker-compose -f docker/docker-compose.yml down -v
       - docker-compose -f docker/docker-compose.yml up -d db
 
-  db:migrate:
-    desc: Run database migrations with detailed logging
-    cmds:
-      - cd src && doppler run -- RUN_MIGRATIONS_ONLY=true go run .
-
-  db:migrate:local:
-    desc: Run database migrations against local database
-    env:
-      DB_HOST: localhost
-      DB_PORT: 5484
-      DB_USER: calendar_user
-      DB_PASSWORD: calendar_pass
-      DB_NAME: calendar_db
-      DB_SSLMODE: disable
-    cmds:
-      - cd src && RUN_MIGRATIONS_ONLY=true go run .
-
   db:status:
     desc: Show migration status
     cmds:
-      - cd src && doppler run -- go run .
+      - cd src && go run .
 
   # Version management tasks
   version:

@@ -1,6 +1,9 @@
 # Calendar API
 
-[![CI](https://github.com/YoloWingPixie/calendar-api/actions/workflows/ci.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api/actions/workflows/ci.yml)
+[![CI](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/ci.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/ci.yml)
+[![Staging Deploy](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/staging-deploy.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/staging-deploy.yml)
+[![Production Deploy](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/production-deploy.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/production-deploy.yml)
+[![Terraform](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/terraform-deployment.yml/badge.svg)](https://github.com/YoloWingPixie/calendar-api-3dead8d4/actions/workflows/terraform-deployment.yml)
 
 A centralized backend REST API service for calendar and event management, designed to replace fragmented legacy calendar tools within the organization.
 
@@ -84,41 +87,50 @@ task dev
 
 # Run mod, format, lint, test
 task ci
+
+# Demo a deployed API, note that this task requires doppler and assumes you have BOOTSTRAP_API_KEY set.
+task demo
 ```
 
 ## Environment Setup
 
-### Local Development without Doppler
-It is possible to run this project locally without Doppler, however task commands will not work properly (as they expect doppler), and this will not be valid for deployment to AWS:
-Create a `.env` file with the following variables:
+### Local Development
+The application can be run locally using Docker Compose with sensible defaults. No `.env` file is required as all variables have defaults in `docker-compose.yml`. However, if you want to override any defaults, you can create a `.env` file with any of these variables:
 
 ```bash
 # Database Configuration
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=calendar
-DB_SSLMODE=disable
+POSTGRES_USER=calendar_user
+POSTGRES_PASSWORD=calendar_pass
+POSTGRES_DB=calendar_db
+DB_PORT=5484
 
-# Server Configuration
-PORT=8080
-HOST=0.0.0.0
+# Test Database Configuration
+TEST_POSTGRES_USER=test_user
+TEST_POSTGRES_PASSWORD=test_pass
+TEST_POSTGRES_DB=calendar_test_db
+TEST_DB_PORT=5485
 
-# Application Configuration
+# API Configuration
+API_PORT=8012
 DEBUG=true
-BOOTSTRAP_ADMIN_KEY=dev-admin-key-123
+BOOTSTRAP_ADMIN_KEY=dev-test-key-123
 ```
 
 ### Docker Development
-For Docker Compose development, use Doppler to manage secrets:
+For Docker Compose development, simply run:
 
 ```bash
-# Run with Doppler
-doppler run -- docker compose up
+# Start the development environment
+task dev
+
+# View logs
+task docker:logs
+
+# Stop the environment
+task docker:down
 ```
 
-The required secrets are managed through Doppler as described in the [Doppler Configuration](#doppler-configuration) section above.
+The application will be available at `http://localhost:8012` by default.
 
 ### Setting up OIDC to AWS
 
