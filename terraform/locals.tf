@@ -9,7 +9,7 @@ locals {
   is_canonical_environment = contains(local.canonical_environments, var.environment)
 
   # Doppler config to use (non-canonical environments use dev)
-  doppler_config = local.is_canonical_environment ? var.environment : "dev"
+  doppler_config = var.environment == "prod" ? "prd" : (local.is_canonical_environment ? var.environment : "dev")
 
   # Environment configuration
   environment_config = {
