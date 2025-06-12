@@ -66,6 +66,7 @@ class Settings(BaseSettings):
 
     # Security settings
     api_key_header: str = "X-API-Key"
+    bootstrap_admin_key: str | None = None  # Set via BOOTSTRAP_ADMIN_KEY env var
 
 
 settings = Settings()

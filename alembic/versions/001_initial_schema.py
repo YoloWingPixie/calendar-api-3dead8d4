@@ -210,6 +210,24 @@ def upgrade() -> None:
         "CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON "
         "calendar_events FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();"
     )
+
+    # Create initial admin user if bootstrap key is provided
+    # This uses the BOOTSTRAP_ADMIN_KEY from the environment
+    # The key should be stored in Doppler for each environment
+    bootstrap_key = op.get_context().config.get_section_option(
+        "app:main", "bootstrap_admin_key"
+    )
+    if not bootstrap_key:
+        import os
+
+        bootstrap_key = os.environ.get("BOOTSTRAP_ADMIN_KEY")
+
+    if bootstrap_key:
+        op.execute(f"""
+            INSERT INTO users (username, access_key)
+            VALUES ('root', '{bootstrap_key}')
+            ON CONFLICT (username) DO NOTHING;
+        """)
     # ### end Alembic commands ###
 
 

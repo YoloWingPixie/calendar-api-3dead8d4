@@ -12,7 +12,7 @@ class CalendarCreate(CustomModel):
     """Schema for creating a new calendar."""
 
     calendar_name: str = Field(
-        ..., min_length=1, max_length=255, description="Calendar name"
+        ..., min_length=1, max_length=255, description="Calendar name", alias="name"
     )
     editor_ids: list[UUID] = Field(
         default_factory=list, description="List of user IDs with editor permissions"
@@ -53,7 +53,7 @@ class CalendarResponse(CustomModel):
 
     calendar_id: UUID = Field(..., description="Unique calendar identifier")
     owner_user_id: UUID = Field(..., description="Calendar owner user ID")
-    calendar_name: str = Field(..., description="Calendar name")
+    calendar_name: str = Field(..., description="Calendar name", alias="name")
     editor_ids: list[UUID] = Field(
         ..., description="List of user IDs with editor permissions"
     )
