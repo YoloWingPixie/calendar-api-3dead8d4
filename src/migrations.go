@@ -84,6 +84,19 @@ func (m *MigrationManager) GetMigrations() []Migration {
 			CREATE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key);
 			`,
 		},
+		{
+			Version:     "005",
+			Description: "Insert test events",
+			SQL: `
+			INSERT INTO events (id, title, description, start_time, end_time)
+			VALUES 
+				('550e8400-e29b-41d4-a716-446655440001', 'Team Standup', 'Daily team standup meeting', '2025-06-13 09:00:00+00', '2025-06-13 09:30:00+00'),
+				('550e8400-e29b-41d4-a716-446655440002', 'Sprint Planning', 'Sprint planning session for next iteration', '2025-06-13 10:00:00+00', '2025-06-13 12:00:00+00'),
+				('550e8400-e29b-41d4-a716-446655440003', 'Lunch & Learn', 'Tech talk about microservices architecture', '2025-06-13 12:30:00+00', '2025-06-13 13:30:00+00'),
+				('550e8400-e29b-41d4-a716-446655440004', 'Code Review', 'Review pull requests and discuss implementation', '2025-06-13 14:00:00+00', '2025-06-13 15:00:00+00'),
+				('550e8400-e29b-41d4-a716-446655440005', 'End of Day Sync', 'Quick sync to wrap up the day', '2025-06-13 17:00:00+00', '2025-06-13 17:15:00+00');
+			`,
+		},
 	}
 }
 
