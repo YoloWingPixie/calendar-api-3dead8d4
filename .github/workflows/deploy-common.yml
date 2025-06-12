@@ -118,7 +118,7 @@ jobs:
         with:
           script: |
             const env = '${{ inputs.environment }}';
-            const isProduction = env === 'prod';
+            const isProduction = env === 'prd';
             const isTransient = '${{ inputs.is_ephemeral }}' === 'true';
 
             const deployment = await github.rest.repos.createDeployment({
