@@ -9,6 +9,27 @@ tasks:
       - task --list
     silent: true
 
+  demo:
+    desc: Run API demo script (OS aware)
+    cmds:
+      - cmd: |
+          if ! docker ps | grep -q calendar-api-server; then
+            echo "Starting development server..."
+            task: dev
+            echo "Waiting for server to start..."
+            sleep 5
+          fi
+          doppler run -- ./tests/api_demo.sh
+          if ! docker ps | grep -q calendar-api-server; then
+            task: docker:down
+          fi
+        platforms: [darwin, linux]
+      - cmd: powershell -Command "if (-not (docker ps | Select-String -Pattern 'calendar-api-server' -Quiet)) { Write-Host 'Starting development server...'; task dev; Write-Host 'Waiting for server to start...'; Start-Sleep -Seconds 5 }; doppler run -- powershell -ExecutionPolicy Bypass -File ./tests/api_demo.ps1; if (-not (docker ps | Select-String -Pattern 'calendar-api-server' -Quiet)) { task docker:down }"
+        platforms: [windows]
+    preconditions:
+      - sh: '[ -f ./tests/api_demo.sh ] || [ -f ./tests/api_demo.ps1 ]'
+        msg: "Demo scripts not found. Please ensure either api_demo.sh or api_demo.ps1 exists in the tests directory."
+
   install-go:
     desc: Install Go if not present
     cmds:
