@@ -11,7 +11,7 @@ from src.core.config import settings
 # Create engine with appropriate pooling for production
 # For RDS, we use connection pooling with pre-ping to handle network issues
 engine = create_engine(
-    settings.database_url,
+    str(settings.database_url),
     # Connection pool settings optimized for production
     pool_size=20 if not settings.debug else 5,
     max_overflow=40 if not settings.debug else 10,

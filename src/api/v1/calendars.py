@@ -42,7 +42,7 @@ async def create_calendar(
 
     return CalendarResponse(
         calendar_id=new_calendar.calendar_id,
-        name=new_calendar.calendar_name,  # Use alias 'name'
+        calendar_name=new_calendar.calendar_name,
         owner_user_id=new_calendar.owner_user_id,
         editor_ids=new_calendar.editor_ids or [],
         reader_ids=new_calendar.reader_ids or [],

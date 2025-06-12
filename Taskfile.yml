@@ -61,18 +61,18 @@ tasks:
   test:
     desc: Run tests with pytest
     cmds:
-      - uv run pytest tests/ -v --cov=src --cov-report=term-missing
+      - doppler run -- uv run pytest tests/ -v --cov=src --cov-report=term-missing
 
   dev:
     desc: Run development server in Docker
     cmds:
       - docker-compose -f docker/docker-compose.yml up -d db
-      - docker-compose -f docker/docker-compose.yml up api
+      - doppler run -- docker-compose -f docker/docker-compose.yml up api
 
   dev:local:
     desc: Run development server locally
     cmds:
-      - uv run python -m src.main
+      - doppler run -- uv run python -m src.main
 
   docker:build:
     desc: Build Docker images
@@ -93,32 +93,32 @@ tasks:
     desc: Build and run the Docker container standalone
     cmds:
       - docker build -t calendar-api:local -f docker/Dockerfile .
-      - docker run --rm -it -p 8000:8000 --name calendar-api-local calendar-api:local
+      - doppler run -- docker run --rm -it -p 8000:8000 --name calendar-api-local calendar-api:local
 
   db:migrate:
     desc: Run database migrations
     cmds:
-      - uv run alembic upgrade head
+      - doppler run -- uv run alembic upgrade head
 
   db:revision:
     desc: Create a new database migration
     cmds:
-      - uv run alembic revision --autogenerate -m "{{.CLI_ARGS}}"
+      - doppler run -- uv run alembic revision --autogenerate -m "{{.CLI_ARGS}}"
 
   db:downgrade:
     desc: Downgrade database by one revision
     cmds:
-      - uv run alembic downgrade -1
+      - doppler run -- uv run alembic downgrade -1
 
   db:history:
     desc: Show migration history
     cmds:
-      - uv run alembic history
+      - doppler run -- uv run alembic history
 
   db:current:
     desc: Show current database revision
     cmds:
-      - uv run alembic current
+      - doppler run -- uv run alembic current
 
   ci:
     desc: Run CI tasks
