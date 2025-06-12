@@ -5,6 +5,7 @@ import pkgutil
 
 from fastapi import APIRouter, FastAPI
 
+from src.api.v1 import events, health
 from src.core.config import settings
 
 
@@ -42,9 +43,8 @@ def register_routers(app: FastAPI) -> None:
     Args:
         app: The FastAPI application instance
     """
-    # Load all v1 API routers
-    v1_routers = load_routers_from_module("src.api.v1")
+    v1_router = APIRouter(prefix=settings.api_v1_str)
+    v1_router.include_router(health.router)
+    v1_router.include_router(events.router)
 
-    # Register each router with the app
-    for router in v1_routers:
-        app.include_router(router, prefix=settings.api_v1_str)
+    app.include_router(v1_router)

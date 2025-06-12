@@ -10,16 +10,16 @@ import sqlalchemy as sa
 from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID as pg_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models.base import Base
 
 if TYPE_CHECKING:
-    from src.models.calendar import Calendar
+    pass
 
 
 class User(Base):
-    """User model representing system users."""
+    """User model."""
 
     __tablename__ = "users"
 
@@ -38,12 +38,4 @@ class User(Base):
         server_default=sa.text("now()"),
         onupdate=sa.text("now()"),
         nullable=False,
-    )
-
-    # Relationships
-    calendars: Mapped[list[Calendar]] = relationship(
-        "Calendar",
-        back_populates="owner",
-        foreign_keys="Calendar.owner_user_id",
-        cascade="all, delete-orphan",
     )
