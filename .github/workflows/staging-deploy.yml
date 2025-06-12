@@ -54,7 +54,7 @@ jobs:
         run: |
           # Get version information
           if [ -f "VERSION" ]; then
-            VERSION=$(cat VERSION | tr -d '[:space:]')
+            VERSION=$(cat VERSION | tr -cd '0-9.')
           else
             VERSION="0.0.0"
           fi
