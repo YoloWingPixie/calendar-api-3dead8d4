@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from src.core.config import settings
 from src.core.database import get_db
 from src.main import app
 
@@ -19,6 +20,7 @@ def mock_db():
 @pytest.fixture
 def client(mock_db):
     """Create a test client with mocked database."""
+    settings.testing = True
 
     def override_get_db():
         yield mock_db

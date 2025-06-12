@@ -65,6 +65,7 @@ class AppSettings(BaseSettings):
     debug: bool = False
     environment: str = "dev"
     log_level: str = "INFO"
+    testing: bool = False
 
     # Server settings
     host: str = "0.0.0.0"
