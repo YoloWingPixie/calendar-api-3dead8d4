@@ -87,6 +87,9 @@ task dev
 
 # Run mod, format, lint, test
 task ci
+
+# Demo a deployed API, note that this task requires doppler and assumes you have BOOTSTRAP_API_KEY set.
+task demo
 ```
 
 ## Environment Setup
