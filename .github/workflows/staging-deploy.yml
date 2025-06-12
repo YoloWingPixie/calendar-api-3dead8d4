@@ -67,10 +67,11 @@ jobs:
           VERSION_TAG="v${VERSION}"
           RC_TAG="v${VERSION}-rc.${{ github.run_number }}"
           SHA_TAG="v${VERSION}-${COMMIT}"
+          SHA_FULL_TAG="sha-${HEAD_SHA}"
           IMAGE_NAME="$ECR_REGISTRY/$ECR_REPOSITORY"
 
           echo "Building container with version: $VERSION"
-          echo "Tags: $VERSION_TAG, $RC_TAG, $SHA_TAG"
+          echo "Tags: $VERSION_TAG, $RC_TAG, $SHA_TAG, $SHA_FULL_TAG"
 
           # Build with version information embedded
           docker build \
@@ -80,12 +81,14 @@ jobs:
             -t $IMAGE_NAME:$VERSION_TAG \
             -t $IMAGE_NAME:$RC_TAG \
             -t $IMAGE_NAME:$SHA_TAG \
+            -t $IMAGE_NAME:$SHA_FULL_TAG \
             -f docker/Dockerfile .
 
           echo "Pushing images..."
           docker push $IMAGE_NAME:$VERSION_TAG
           docker push $IMAGE_NAME:$RC_TAG
           docker push $IMAGE_NAME:$SHA_TAG
+          docker push $IMAGE_NAME:$SHA_FULL_TAG
 
           echo "rc_image_uri=$IMAGE_NAME:$RC_TAG" >> $GITHUB_OUTPUT
           echo "sha_image_uri=$IMAGE_NAME:$SHA_TAG" >> $GITHUB_OUTPUT
