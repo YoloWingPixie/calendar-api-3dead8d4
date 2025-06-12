@@ -39,13 +39,14 @@ def get_database_url() -> str:
     """
     doppler_json_str = os.getenv("DOPPLER_SECRETS_JSON")
     if doppler_json_str:
-        print("Found DOPPLER_SECRETS_JSON, attempting to parse...")
+        print("INFO: Found DOPPLER_SECRETS_JSON, attempting to parse...")
         try:
             secrets = json.loads(doppler_json_str)
+            print(f"INFO: Doppler secrets found. Keys: {list(secrets.keys())}")
             # Doppler can use different keys, check for common ones
             for key in ["DATABASE_URL", "TF_VAR_database_url", "TF_VAR_DATABASE_URL"]:
                 if key in secrets and secrets[key]:
-                    print(f"Using database URL from Doppler secret key: {key}")
+                    print(f"INFO: Using database URL from Doppler secret key: {key}")
                     return str(secrets[key])
 
             # If no key was found, raise an error with context
@@ -59,13 +60,13 @@ def get_database_url() -> str:
     # Fallback for local development or other environments
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        print("Using database URL from DATABASE_URL environment variable.")
+        print("INFO: Using database URL from DATABASE_URL environment variable.")
         return database_url
 
     # Final fallback to alembic.ini, if configured there.
     ini_url = config.get_main_option("sqlalchemy.url")
     if ini_url:
-        print("Using database URL from alembic.ini.")
+        print("INFO: Using database URL from alembic.ini.")
         return ini_url
 
     raise ValueError(
@@ -80,11 +81,20 @@ def get_bootstrap_key() -> str | None:
     if doppler_json_str:
         try:
             secrets = json.loads(doppler_json_str)
+            print(f"INFO: Doppler secrets found. Keys: {list(secrets.keys())}")
             if "TF_VAR_bootstrap_admin_key" in secrets:
+                print("INFO: Found bootstrap admin key in Doppler secrets.")
                 return secrets["TF_VAR_bootstrap_admin_key"]
         except json.JSONDecodeError:
+            print("ERROR: Could not decode DOPPLER_SECRETS_JSON.")
             pass  # Fail silently
-    return os.environ.get("BOOTSTRAP_ADMIN_KEY")
+    key = os.environ.get("BOOTSTRAP_ADMIN_KEY")
+    if key:
+        print("INFO: Found bootstrap admin key in environment variable.")
+        return key
+
+    print("INFO: Bootstrap admin key not found in Doppler or environment.")
+    return None
 
 
 # Override the sqlalchemy.url with the correct database URL.
