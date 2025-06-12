@@ -1,5 +1,6 @@
 """API Key authentication dependency."""
 
+import logging
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, status
@@ -9,47 +10,33 @@ from src.core.config import settings
 from src.core.database import get_db
 from src.models.user import User
 
+logger = logging.getLogger(__name__)
+
 
 async def get_current_user(
     db: Annotated[Session, Depends(get_db)],
     api_key: Annotated[str | None, Header(alias=settings.api_key_header)] = None,
 ) -> User:
     """
-    Validate API key and return the authenticated user.
-
-    Args:
-        api_key: API key from X-API-Key header
-        db: Database session
-
-    Returns:
-        User: The authenticated user
-
-    Raises:
-        HTTPException: If API key is missing or invalid
+    Get the current user from the provided API key.
     """
     if not api_key:
+        logger.warning("API key missing")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "error": "Unauthorized",
-                "detail": "Missing API key",
-                "code": "UNAUTHORIZED",
-            },
+            detail="Not authenticated",
         )
 
-    # Check database for user with this API key
-    # This includes the root user seeded with BOOTSTRAP_ADMIN_KEY
+    logger.debug("Looking up user by API key")
     user = db.query(User).filter(User.access_key == api_key).first()
     if not user:
+        logger.warning("Invalid API key provided")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "error": "Unauthorized",
-                "detail": "Invalid API key",
-                "code": "UNAUTHORIZED",
-            },
+            detail="Invalid API Key",
         )
 
+    logger.info(f"Authenticated user '{user.username}'")
     return user
 
 

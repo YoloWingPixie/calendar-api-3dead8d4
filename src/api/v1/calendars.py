@@ -1,5 +1,6 @@
 """Calendar management endpoints."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -11,6 +12,7 @@ from src.models.calendar import Calendar
 from src.schemas.calendar import CalendarCreate, CalendarResponse
 
 router = APIRouter(prefix="/calendars", tags=["calendars"])
+logger = logging.getLogger(__name__)
 
 
 @router.post(
@@ -30,6 +32,11 @@ async def create_calendar(
 
     Requires API key authentication via X-API-Key header.
     """
+    logger.info(
+        "User '%s' creating calendar '%s'",
+        current_user.username,
+        calendar_data.calendar_name,
+    )
     # Create new calendar
     new_calendar = Calendar(
         calendar_name=calendar_data.calendar_name,
@@ -39,6 +46,7 @@ async def create_calendar(
     db.add(new_calendar)
     db.commit()
     db.refresh(new_calendar)
+    logger.info(f"Successfully created calendar '{new_calendar.calendar_name}'")
 
     return CalendarResponse(
         calendar_id=new_calendar.calendar_id,

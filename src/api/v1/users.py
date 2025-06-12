@@ -1,5 +1,6 @@
 """User management endpoints."""
 
+import logging
 import secrets
 from typing import Annotated
 
@@ -13,6 +14,7 @@ from src.models.user import User
 from src.schemas.user import UserCreate, UserWithAccessKey
 
 router = APIRouter(prefix="/users", tags=["users"])
+logger = logging.getLogger(__name__)
 
 
 def generate_api_key() -> str:
@@ -27,7 +29,8 @@ def generate_api_key() -> str:
     summary="Create a new user",
     description=(
         "Create a new user with a unique username. "
-        "Returns the user details including the API key. Requires authentication."
+        "Returns the user details including the API key. "
+        "Requires admin privileges."
     ),
 )
 async def create_user(
@@ -38,9 +41,23 @@ async def create_user(
     """
     Create a new user and return their details with API key.
 
-    Requires authentication. Only authenticated users can create new users.
-    The API key is only returned once during user creation.
+    Requires admin authentication. The API key is only returned once.
     """
+    logger.info(
+        "User '%s' attempting to create user '%s'",
+        current_user.username,
+        user_data.username,
+    )
+    # Only admin users (including the bootstrapped 'root' user) can create users.
+    if current_user.username != "root":
+        logger.warning(
+            f"User '{current_user.username}' does not have privileges to create users."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to create users.",
+        )
+
     # Generate a unique API key
     access_key = generate_api_key()
 
@@ -54,15 +71,13 @@ async def create_user(
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
+        logger.info(f"Successfully created user '{new_user.username}'")
     except IntegrityError as e:
         db.rollback()
+        logger.error(f"Failed to create user '{user_data.username}': Username exists.")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "error": "Conflict",
-                "detail": "Username already exists",
-                "code": "USERNAME_EXISTS",
-            },
+            detail="Username already exists",
         ) from e
 
     # Return user with access key (only time it's shown)

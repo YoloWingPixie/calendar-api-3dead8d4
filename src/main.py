@@ -17,8 +17,11 @@ def create_app() -> FastAPI:
     )
 
     # Configure logging
-    logging.basicConfig(level=settings.log_level.upper())
-    logging.info(f"Configured database is: {settings.database_url}")
+    logging.basicConfig(
+        level=settings.log_level.upper(),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    logging.info(f"Connecting to database: {settings.database_url}")
 
     # Register all routes dynamically
     register_routers(app)

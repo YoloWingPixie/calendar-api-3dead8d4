@@ -24,7 +24,7 @@ def test_create_user_requires_auth(client: TestClient, mock_db, monkeypatch) -> 
         json={"username": "testuser"},
     )
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"]["code"] == "UNAUTHORIZED"
+    assert "Not authenticated" in response.text
 
 
 def test_create_user_with_bootstrap_key(
@@ -35,6 +35,18 @@ def test_create_user_with_bootstrap_key(
 
     # Set bootstrap key in environment
     monkeypatch.setenv("BOOTSTRAP_ADMIN_KEY", "test-bootstrap-key")
+
+    # Mock the root user lookup
+    mock_user = User(
+        user_id=uuid4(),
+        username="root",
+        access_key="test-bootstrap-key",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_user
+    mock_db.query.return_value = mock_query
 
     # Mock the database operations
     mock_db.add = MagicMock()
@@ -65,10 +77,24 @@ def test_create_user_duplicate_username(
     client: TestClient, mock_db, monkeypatch
 ) -> None:
     """Test that duplicate usernames are rejected."""
+    from datetime import UTC, datetime
+
     from sqlalchemy.exc import IntegrityError
 
     # Set bootstrap key
     monkeypatch.setenv("BOOTSTRAP_ADMIN_KEY", "test-bootstrap-key")
+
+    # Mock the root user lookup
+    mock_user = User(
+        user_id=uuid4(),
+        username="root",
+        access_key="test-bootstrap-key",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    mock_query = MagicMock()
+    mock_query.filter.return_value.first.return_value = mock_user
+    mock_db.query.return_value = mock_query
 
     # Mock the database to raise IntegrityError on add
     mock_db.add = MagicMock(side_effect=IntegrityError("duplicate", None, None))
@@ -80,7 +106,7 @@ def test_create_user_duplicate_username(
         headers={"X-API-Key": "test-bootstrap-key"},
     )
     assert response.status_code == status.HTTP_409_CONFLICT
-    assert response.json()["detail"]["code"] == "USERNAME_EXISTS"
+    assert "Username already exists" in response.text
 
 
 def test_protected_endpoint_without_auth(client: TestClient) -> None:
@@ -90,8 +116,7 @@ def test_protected_endpoint_without_auth(client: TestClient) -> None:
         json={"name": "My Calendar"},
     )
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"]["code"] == "UNAUTHORIZED"
-    assert "Missing API key" in response.json()["detail"]["detail"]
+    assert "Not authenticated" in response.text
 
 
 def test_protected_endpoint_with_invalid_auth(client: TestClient, mock_db) -> None:
@@ -107,8 +132,7 @@ def test_protected_endpoint_with_invalid_auth(client: TestClient, mock_db) -> No
         headers={"X-API-Key": "invalid-key"},
     )
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
-    assert response.json()["detail"]["code"] == "UNAUTHORIZED"
-    assert "Invalid API key" in response.json()["detail"]["detail"]
+    assert "Invalid API Key" in response.text
 
 
 def test_protected_endpoint_with_valid_auth(client: TestClient, mock_db) -> None:
