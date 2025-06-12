@@ -30,7 +30,7 @@ def generate_api_key() -> str:
     description=(
         "Create a new user with a unique username. "
         "Returns the user details including the API key. "
-        "Requires admin privileges."
+        "Requires a valid API key to be provided."
     ),
 )
 async def create_user(
@@ -41,24 +41,14 @@ async def create_user(
     """
     Create a new user and return their details with API key.
 
-    Requires admin authentication. The API key is only returned once.
+    Requires a valid API key (including the bootstrap key).
     """
     logger.info(
         "User '%s' attempting to create user '%s'",
         current_user.username,
         user_data.username,
     )
-    # Only admin users (including the bootstrapped 'root' user) can create users.
-    if current_user.username != "root":
-        logger.warning(
-            f"User '{current_user.username}' does not have privileges to create users."
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to create users.",
-        )
-
-    # Generate a unique API key
+    # Any authenticated user can create another user
     access_key = generate_api_key()
 
     # Create new user
@@ -85,7 +75,6 @@ async def create_user(
         user_id=new_user.user_id,
         username=new_user.username,
         access_key=new_user.access_key,
-        owned_calendar_ids=[],  # New user has no calendars yet
         created_at=new_user.created_at,
         updated_at=new_user.updated_at,
     )

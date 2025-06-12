@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING
-from uuid import UUID
+from uuid import UUID as py_UUID
 
-from sqlalchemy import TIMESTAMP, String, func
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+import sqlalchemy as sa
+from sqlalchemy import String
+from sqlalchemy.dialects.postgresql import TIMESTAMP
+from sqlalchemy.dialects.postgresql import UUID as pg_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base
@@ -21,23 +23,21 @@ class User(Base):
 
     __tablename__ = "users"
 
-    user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
+    user_id: Mapped[py_UUID] = mapped_column(
+        pg_UUID(as_uuid=True),
         primary_key=True,
-        server_default=func.gen_random_uuid(),
+        server_default=sa.text("gen_random_uuid()"),
     )
     username: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     access_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True),
-        nullable=False,
-        server_default=func.now(),
+        TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
+        server_default=sa.text("now()"),
+        onupdate=sa.text("now()"),
         nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
     )
 
     # Relationships

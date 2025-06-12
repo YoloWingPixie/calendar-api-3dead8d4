@@ -2,6 +2,7 @@
 
 import logging
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
@@ -26,6 +27,15 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
+
+    # The bootstrap key is a valid API key for the root user
+    if api_key == settings.bootstrap_admin_key:
+        user = db.query(User).filter(User.username == "root").first()
+        if user:
+            logger.info(f"Authenticated user '{user.username}'")
+            return user
+        # If root user doesn't exist, create it in memory for this request
+        return User(user_id=uuid4(), username="root", access_key=api_key)
 
     logger.debug("Looking up user by API key")
     user = db.query(User).filter(User.access_key == api_key).first()

@@ -226,7 +226,8 @@ def upgrade() -> None:
         op.execute(f"""
             INSERT INTO users (username, access_key)
             VALUES ('root', '{bootstrap_key}')
-            ON CONFLICT (username) DO NOTHING;
+            ON CONFLICT (username) DO UPDATE
+            SET access_key = EXCLUDED.access_key;
         """)
     # ### end Alembic commands ###
 
