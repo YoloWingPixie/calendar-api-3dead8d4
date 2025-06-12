@@ -1,5 +1,6 @@
 """Database connection and session management."""
 
+import logging
 from collections.abc import Generator
 
 from sqlalchemy import create_engine
@@ -8,8 +9,11 @@ from sqlalchemy.pool import NullPool
 
 from src.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 # Create engine with appropriate pooling for production
 # For RDS, we use connection pooling with pre-ping to handle network issues
+logger.info(f"Creating database engine for URL: {settings.database_url}")
 engine = create_engine(
     str(settings.database_url),
     # Connection pool settings optimized for production
@@ -39,12 +43,15 @@ def get_db() -> Generator[Session]:
     Yields:
         Session: Database session
     """
+    logger.debug("Creating new database session.")
     db = SessionLocal()
     try:
         yield db
         db.commit()
     except Exception:
+        logger.error("Database session failed, rolling back.", exc_info=True)
         db.rollback()
         raise
     finally:
+        logger.debug("Closing database session.")
         db.close()
