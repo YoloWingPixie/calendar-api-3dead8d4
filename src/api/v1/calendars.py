@@ -71,7 +71,7 @@ async def create_calendar(
 async def get_calendars(
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> list[Calendar]:
     """List all calendars owned by the current user."""
     calendars = (
         db.query(Calendar).filter(Calendar.owner_user_id == current_user.user_id).all()
@@ -84,7 +84,7 @@ async def get_calendar(
     calendar_id: UUID,
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> Calendar:
     """Get a single calendar by ID."""
     calendar = db.query(Calendar).filter(Calendar.calendar_id == calendar_id).first()
     if not calendar:
@@ -99,7 +99,7 @@ async def update_calendar(
     calendar_data: CalendarUpdate,
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> Calendar:
     """Update a calendar."""
     calendar = db.query(Calendar).filter(Calendar.calendar_id == calendar_id).first()
     if not calendar:
@@ -124,7 +124,7 @@ async def delete_calendar(
     calendar_id: UUID,
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> None:
     """Delete a calendar."""
     calendar = db.query(Calendar).filter(Calendar.calendar_id == calendar_id).first()
     if not calendar:

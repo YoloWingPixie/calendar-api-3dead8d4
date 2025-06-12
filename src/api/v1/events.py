@@ -30,7 +30,7 @@ async def create_event(
     event_data: CalendarEventCreate,
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> CalendarEvent:
     """Create a new event in a calendar."""
     logger.info(
         f"User '{current_user.username}' creating event in calendar '{calendar_id}'"
@@ -62,7 +62,7 @@ async def get_events(
     calendar_id: UUID,
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> list[CalendarEvent]:
     """Get all events for a calendar."""
     calendar = db.query(Calendar).filter(Calendar.calendar_id == calendar_id).first()
     if not calendar:
@@ -87,7 +87,7 @@ async def update_event(
     event_data: CalendarEventUpdate,
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> CalendarEvent:
     """Update an event."""
     event = db.query(CalendarEvent).filter(CalendarEvent.event_id == event_id).first()
     if not event or event.calendar_id != calendar_id:
@@ -115,7 +115,7 @@ async def delete_event(
     event_id: UUID,
     current_user: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
-):
+) -> None:
     """Delete an event."""
     event = db.query(CalendarEvent).filter(CalendarEvent.event_id == event_id).first()
     if not event or event.calendar_id != calendar_id:
