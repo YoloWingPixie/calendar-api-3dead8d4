@@ -6,6 +6,8 @@ Create Date: 2025-01-06
 
 """
 
+import json
+import os
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -98,9 +100,16 @@ def upgrade() -> None:
     )
 
     # Create initial admin user if bootstrap key is provided
-    bootstrap_key = op.get_context().config.get_section_option(
-        "app:main", "bootstrap_admin_key"
-    )
+    bootstrap_key = None
+    doppler_json_str = os.getenv("DOPPLER_SECRETS_JSON")
+    if doppler_json_str:
+        try:
+            secrets = json.loads(doppler_json_str)
+            if "TF_VAR_bootstrap_admin_key" in secrets:
+                bootstrap_key = secrets["TF_VAR_bootstrap_admin_key"]
+        except json.JSONDecodeError:
+            print("ERROR: Could not decode DOPPLER_SECRETS_JSON.")
+
     if bootstrap_key:
         print("INFO: Bootstrap key found, attempting to create root user.")
         op.execute(f"""
